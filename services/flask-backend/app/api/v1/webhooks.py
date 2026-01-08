@@ -1,0 +1,237 @@
+"""Webhook Handlers - GitHub/GitLab webhook endpoints."""
+
+import hashlib
+import hmac
+from flask import Blueprint, jsonify, request
+
+from ...models import (
+    create_review,
+    get_repo_config,
+    get_db,
+)
+
+webhooks_bp = Blueprint("webhooks", __name__, url_prefix="/api/v1/webhooks")
+
+
+def verify_github_signature(payload_body: bytes, signature: str, secret: str) -> bool:
+    """Verify GitHub webhook signature."""
+    if not signature:
+        return False
+
+    # GitHub uses sha256= prefix
+    if not signature.startswith("sha256="):
+        return False
+
+    expected_hash = hmac.new(
+        secret.encode(),
+        payload_body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(
+        signature[7:],  # Remove 'sha256=' prefix
+        expected_hash,
+    )
+
+
+def verify_gitlab_signature(payload_body: bytes, signature: str, secret: str) -> bool:
+    """Verify GitLab webhook signature."""
+    if not signature:
+        return False
+
+    expected_hash = hmac.new(
+        secret.encode(),
+        payload_body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(signature, expected_hash)
+
+
+@webhooks_bp.route("/github", methods=["POST"])
+def github_webhook():
+    """GitHub webhook handler."""
+    # Get headers
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    event_type = request.headers.get("X-GitHub-Event", "")
+
+    # Get payload
+    payload_body = request.get_data()
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    # Extract repo info
+    repo_name = data.get("repository", {}).get("full_name", "")
+    if not repo_name:
+        return jsonify({"error": "Repository information missing"}), 400
+
+    # Get repository config
+    repo_config = get_repo_config("github", repo_name)
+    if not repo_config:
+        return jsonify({"message": "Repository not configured"}), 200
+
+    # Verify signature
+    webhook_secret = repo_config.get("webhook_secret", "")
+    if webhook_secret and not verify_github_signature(payload_body, signature, webhook_secret):
+        return jsonify({"error": "Invalid signature"}), 401
+
+    # Skip if repository is not enabled
+    if not repo_config.get("enabled"):
+        return jsonify({"message": "Repository disabled"}), 200
+
+    # Process pull request events
+    if event_type == "pull_request":
+        pr_data = data.get("pull_request", {})
+        action = data.get("action", "")
+
+        # Trigger review on open if configured
+        if action == "opened" and repo_config.get("review_on_open"):
+            review = create_review(
+                external_id=f"github-{pr_data.get('id')}",
+                platform="github",
+                repository=repo_name,
+                pull_request_id=pr_data.get("number"),
+                pull_request_url=pr_data.get("html_url"),
+                base_sha=data.get("pull_request", {}).get("base", {}).get("sha"),
+                head_sha=data.get("pull_request", {}).get("head", {}).get("sha"),
+                review_type="differential",
+                categories=repo_config.get("default_categories", ["security", "best_practices"]),
+                ai_provider=repo_config.get("default_ai_provider", "claude"),
+            )
+            return jsonify({"message": "Review created", "review_id": review.get("id")}), 202
+
+        # Trigger review on synchronize if configured
+        if action == "synchronize" and repo_config.get("review_on_sync"):
+            review = create_review(
+                external_id=f"github-{pr_data.get('id')}-sync",
+                platform="github",
+                repository=repo_name,
+                pull_request_id=pr_data.get("number"),
+                pull_request_url=pr_data.get("html_url"),
+                base_sha=data.get("pull_request", {}).get("base", {}).get("sha"),
+                head_sha=data.get("pull_request", {}).get("head", {}).get("sha"),
+                review_type="differential",
+                categories=repo_config.get("default_categories", ["security", "best_practices"]),
+                ai_provider=repo_config.get("default_ai_provider", "claude"),
+            )
+            return jsonify({"message": "Review created", "review_id": review.get("id")}), 202
+
+    return jsonify({"message": "Webhook received"}), 200
+
+
+@webhooks_bp.route("/gitlab", methods=["POST"])
+def gitlab_webhook():
+    """GitLab webhook handler."""
+    # Get headers
+    signature = request.headers.get("X-Gitlab-Token", "")
+    event_type = request.headers.get("X-Gitlab-Event", "")
+
+    # Get payload
+    payload_body = request.get_data()
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    # Extract repo info
+    project = data.get("project", {})
+    repo_name = project.get("path_with_namespace", "")
+    if not repo_name:
+        return jsonify({"error": "Repository information missing"}), 400
+
+    # Get repository config
+    repo_config = get_repo_config("gitlab", repo_name)
+    if not repo_config:
+        return jsonify({"message": "Repository not configured"}), 200
+
+    # Verify signature (GitLab uses token in header)
+    webhook_secret = repo_config.get("webhook_secret", "")
+    if webhook_secret and signature != webhook_secret:
+        return jsonify({"error": "Invalid signature"}), 401
+
+    # Skip if repository is not enabled
+    if not repo_config.get("enabled"):
+        return jsonify({"message": "Repository disabled"}), 200
+
+    # Process merge request events
+    if event_type == "Merge Request Hook":
+        mr_data = data.get("object_attributes", {})
+        action = mr_data.get("action", "")
+
+        # Trigger review on open if configured
+        if action == "open" and repo_config.get("review_on_open"):
+            review = create_review(
+                external_id=f"gitlab-{mr_data.get('id')}",
+                platform="gitlab",
+                repository=repo_name,
+                pull_request_id=mr_data.get("iid"),
+                pull_request_url=mr_data.get("url"),
+                base_sha=mr_data.get("target_branch"),
+                head_sha=mr_data.get("source_branch"),
+                review_type="differential",
+                categories=repo_config.get("default_categories", ["security", "best_practices"]),
+                ai_provider=repo_config.get("default_ai_provider", "claude"),
+            )
+            return jsonify({"message": "Review created", "review_id": review.get("id")}), 202
+
+        # Trigger review on update if configured
+        if action == "update" and repo_config.get("review_on_sync"):
+            review = create_review(
+                external_id=f"gitlab-{mr_data.get('id')}-update",
+                platform="gitlab",
+                repository=repo_name,
+                pull_request_id=mr_data.get("iid"),
+                pull_request_url=mr_data.get("url"),
+                base_sha=mr_data.get("target_branch"),
+                head_sha=mr_data.get("source_branch"),
+                review_type="differential",
+                categories=repo_config.get("default_categories", ["security", "best_practices"]),
+                ai_provider=repo_config.get("default_ai_provider", "claude"),
+            )
+            return jsonify({"message": "Review created", "review_id": review.get("id")}), 202
+
+    return jsonify({"message": "Webhook received"}), 200
+
+
+@webhooks_bp.route("/github/test", methods=["POST"])
+def github_webhook_test():
+    """Test GitHub webhook configuration."""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
+
+    repo_name = data.get("repository")
+    if not repo_name:
+        return jsonify({"error": "Repository name required"}), 400
+
+    repo_config = get_repo_config("github", repo_name)
+
+    return jsonify({
+        "configured": repo_config is not None,
+        "enabled": repo_config.get("enabled") if repo_config else False,
+        "repository": repo_name,
+    }), 200
+
+
+@webhooks_bp.route("/gitlab/test", methods=["POST"])
+def gitlab_webhook_test():
+    """Test GitLab webhook configuration."""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
+
+    repo_name = data.get("repository")
+    if not repo_name:
+        return jsonify({"error": "Repository name required"}), 400
+
+    repo_config = get_repo_config("gitlab", repo_name)
+
+    return jsonify({
+        "configured": repo_config is not None,
+        "enabled": repo_config.get("enabled") if repo_config else False,
+        "repository": repo_name,
+    }), 200

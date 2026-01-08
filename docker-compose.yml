@@ -41,11 +41,13 @@ services:
     networks:
       - app-network
 
-  # Flask Backend (Standard APIs, Auth, Users)
+  # Flask Backend (Standard APIs, Auth, Users, Dev Tools)
   flask-backend:
     build:
       context: ./services/flask-backend
       dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
     container_name: project-template-flask
     environment:
       - FLASK_ENV=${FLASK_ENV:-production}
@@ -60,6 +62,10 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:-password}@redis:6379/0
       - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL:-admin@example.com}
       - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin123}
+      - RELEASE_MODE=${RELEASE_MODE:-false}
+      - LICENSE_KEY=${LICENSE_KEY:-PENG-XXXX-XXXX-XXXX-XXXX-ABCD}
+      - LICENSE_SERVER_URL=${LICENSE_SERVER_URL:-https://license.penguintech.io}
+      - PRODUCT_NAME=${PRODUCT_NAME:-project-template}
     ports:
       - "${FLASK_PORT:-5000}:5000"
     depends_on:
@@ -75,56 +81,30 @@ services:
     restart: unless-stopped
     networks:
       - app-network
-
-  # Go Backend (High-Performance, XDP/AF_XDP, NUMA)
-  go-backend:
-    build:
-      context: ./services/go-backend
-      dockerfile: Dockerfile
-    container_name: project-template-go
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN
-      - IPC_LOCK
-    environment:
-      - GO_ENV=${GO_ENV:-production}
-      - HOST=0.0.0.0
-      - PORT=8080
-      - NUMA_ENABLED=${NUMA_ENABLED:-false}
-      - XDP_ENABLED=${XDP_ENABLED:-false}
-      - XDP_MODE=${XDP_MODE:-skb}
-      - XDP_INTERFACE=${XDP_INTERFACE:-eth0}
-      - MEMORY_POOL_SLOTS=${MEMORY_POOL_SLOTS:-1024}
-      - MEMORY_POOL_SLOT_SIZE=${MEMORY_POOL_SLOT_SIZE:-2048}
-    ports:
-      - "${GO_PORT:-8080}:8080"
     volumes:
-      - /sys/fs/bpf:/sys/fs/bpf
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-    networks:
-      - app-network
+      - ./services/flask-backend:/app
 
   # WebUI (Node.js + React Frontend Shell)
   webui:
     build:
       context: ./services/webui
       dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
     container_name: project-template-webui
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
       - FLASK_API_URL=http://flask-backend:5000
-      - GO_API_URL=http://go-backend:8080
+      - RELEASE_MODE=${RELEASE_MODE:-false}
+      - LICENSE_KEY=${LICENSE_KEY:-PENG-XXXX-XXXX-XXXX-XXXX-ABCD}
+      - LICENSE_SERVER_URL=${LICENSE_SERVER_URL:-https://license.penguintech.io}
+      - PRODUCT_NAME=${PRODUCT_NAME:-project-template}
     ports:
       - "${WEBUI_PORT:-3000}:3000"
     depends_on:
-      - flask-backend
+      flask-backend:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/healthz"]
       interval: 30s
@@ -133,6 +113,8 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    volumes:
+      - ./services/webui:/app
 
   # Prometheus Monitoring
   prometheus:
@@ -188,7 +170,6 @@ services:
       - nginx_logs:/var/log/nginx
     depends_on:
       - flask-backend
-      - go-backend
       - webui
     networks:
       - app-network
