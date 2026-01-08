@@ -3,7 +3,7 @@
     {
       "name": "projectname-flask-api",
       "ip_fqdn": "flask-backend",
-      "port": 8080,
+      "port": 5000,
       "protocol": "http",
       "collection": "projectname",
       "auth_type": "jwt",
@@ -12,19 +12,6 @@
       "health_check_enabled": true,
       "health_check_path": "/healthz",
       "health_check_interval": 30
-    },
-    {
-      "name": "projectname-go-backend",
-      "ip_fqdn": "go-backend",
-      "port": 50051,
-      "protocol": "grpc",
-      "collection": "projectname",
-      "auth_type": "none",
-      "tls_enabled": false,
-      "tls_verify": true,
-      "health_check_enabled": true,
-      "health_check_path": "/grpc.health.v1.Health/Check",
-      "health_check_interval": 10
     },
     {
       "name": "projectname-webui",

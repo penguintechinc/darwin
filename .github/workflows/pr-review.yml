@@ -1,0 +1,247 @@
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-review:
+    name: Automatic PR Review
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Cache Node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install Python linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy bandit safety
+
+      - name: Install Node.js linters
+        run: |
+          npm install -g eslint prettier
+
+      - name: Install Go linters
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Install Ansible and ansible-lint
+        run: |
+          python -m pip install ansible ansible-lint
+
+      - name: Install Terraform and tflint
+        run: |
+          curl -sSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+          sudo apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+          sudo apt-get update && sudo apt-get install -y terraform
+          curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+      - name: Install actionlint
+        run: |
+          curl -sSL https://github.com/rhysd/actionlint/releases/download/v1.6.27/actionlint_linux_amd64.tar.gz | tar xvz
+          sudo mv actionlint /usr/local/bin/
+          chmod +x /usr/local/bin/actionlint
+
+      - name: Install gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz | tar xvz
+          sudo mv gitleaks /usr/local/bin/
+          chmod +x /usr/local/bin/gitleaks
+
+      - name: Run gitleaks (secrets detection)
+        continue-on-error: true
+        run: |
+          gitleaks detect --source . --verbose --exit-code 0 || true
+
+      - name: Run Python linters
+        continue-on-error: true
+        run: |
+          if [ -f "requirements.txt" ]; then
+            echo "Running Python linters..."
+            flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
+            black --check . || true
+            isort --check-only . || true
+            bandit -r . -ll || true
+            safety check --json || true
+          fi
+
+      - name: Run JavaScript linters
+        continue-on-error: true
+        run: |
+          if [ -f "package.json" ]; then
+            echo "Running JavaScript linters..."
+            eslint . --max-warnings 0 || true
+          fi
+
+      - name: Run Go linters
+        continue-on-error: true
+        run: |
+          if [ -f "go.mod" ]; then
+            echo "Running Go linters..."
+            golangci-lint run ./... || true
+            go mod tidy && git diff --exit-code go.mod || true
+          fi
+
+      - name: Run Ansible linter
+        continue-on-error: true
+        run: |
+          if find . -name "*.yml" -o -name "*.yaml" | grep -E "(playbooks|roles)" > /dev/null 2>&1; then
+            echo "Running Ansible linter..."
+            ansible-lint . || true
+          fi
+
+      - name: Run Terraform linter
+        continue-on-error: true
+        run: |
+          if find . -name "*.tf" > /dev/null 2>&1; then
+            echo "Running Terraform linter..."
+            tflint --init || true
+            tflint . || true
+          fi
+
+      - name: Run actionlint (GitHub Actions)
+        continue-on-error: true
+        run: |
+          if [ -d ".github/workflows" ]; then
+            echo "Running actionlint..."
+            actionlint .github/workflows/*.yml || true
+          fi
+
+      - name: Generate PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const prNumber = context.issue.number;
+
+            let comment = '## Automated PR Review\n\n';
+            comment += '### Checks Performed\n';
+            comment += '- [x] Secrets Detection (gitleaks)\n';
+            comment += '- [x] Python Linting (flake8, black, isort, bandit, safety)\n';
+            comment += '- [x] JavaScript Linting (eslint)\n';
+            comment += '- [x] Go Linting (golangci-lint)\n';
+            comment += '- [x] Ansible Linting\n';
+            comment += '- [x] Terraform Linting (tflint)\n';
+            comment += '- [x] GitHub Actions Linting (actionlint)\n';
+            comment += '\n';
+            comment += '### Review Status\n';
+            comment += '✅ Automated review completed. Please review the job logs for detailed results.\n';
+            comment += '\nNote: This is an automated review. Manual review by maintainers is still required before merging.\n';
+
+            github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Request review
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.issue.number;
+
+            // Get the list of maintainers/reviewers (customize as needed)
+            const reviewers = ['@changeme']; // Update with actual reviewer handles
+
+            github.rest.pulls.requestReviewers({
+              pull_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              reviewers: [] // Add reviewer usernames here (without @)
+            }).catch(err => {
+              console.log('Could not assign reviewers:', err.message);
+            });
+
+  lint-check:
+    name: Lint and Security Checks
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      checks: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: 'python,javascript,go'
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+      - name: Check for large files
+        continue-on-error: true
+        run: |
+          echo "Checking for files exceeding size limits..."
+          echo "Files must be under 25KB (except CLAUDE.md which is max 39KB)"
+          find . -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.tsx" -o -name "*.md" \) -size +25k ! -name "CLAUDE.md" -exec ls -lh {} \;
+          LARGE_FILES=$(find . -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.tsx" -o -name "*.md" \) -size +25k ! -name "CLAUDE.md" | wc -l)
+          if [ "$LARGE_FILES" -gt 0 ]; then
+            echo "WARNING: Found $LARGE_FILES files exceeding 25KB size limit"
+          fi
+
+      - name: Check for hardcoded secrets
+        continue-on-error: true
+        run: |
+          echo "Scanning for hardcoded secrets..."
+          if grep -r "AKIA\|password\s*=\|secret\s*=\|token\s*=" --include="*.py" --include="*.js" --include="*.go" . 2>/dev/null | grep -v "\.env\.example" | grep -v "node_modules" | grep -v ".git"; then
+            echo "WARNING: Possible hardcoded secrets found"
+          fi

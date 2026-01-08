@@ -35,10 +35,3 @@ spec:
             name: flask-backend
             port:
               number: 5000
-      - path: /api/v2
-        pathType: Prefix
-        backend:
-          service:
-            name: go-backend
-            port:
-              number: 8080

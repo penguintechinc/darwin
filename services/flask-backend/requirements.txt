@@ -25,9 +25,28 @@ python-decouple==3.8
 # Monitoring
 prometheus-client==0.21.1
 
+# AI Providers
+anthropic==0.42.0
+openai==1.59.6
+httpx==0.28.1
+
+# Async support
+aiofiles==24.1.0
+
+# Data validation
+pydantic==2.10.4
+
+# Security - encryption for credentials
+cryptography==44.0.0
+
+# Git operations
+GitPython==3.1.44
+
 # Development
 pytest==8.3.4
 pytest-cov==6.0.0
 black==24.10.0
 flake8==7.1.1
 mypy==1.14.0
+bandit==1.8.0
+isort==5.13.2

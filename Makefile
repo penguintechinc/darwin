@@ -11,7 +11,6 @@ PROJECT_NAME := project-template
 VERSION := $(shell cat .version 2>/dev/null || echo "development")
 DOCKER_REGISTRY := ghcr.io
 DOCKER_ORG := penguintechinc
-GO_VERSION := 1.24.2
 PYTHON_VERSION := 3.12
 NODE_VERSION := 18
 
@@ -48,7 +47,6 @@ help: ## Show this help message
 setup: ## Setup - Install all dependencies and initialize the project
 	@echo "$(BLUE)Setting up $(PROJECT_NAME)...$(RESET)"
 	@$(MAKE) setup-env
-	@$(MAKE) setup-go
 	@$(MAKE) setup-python
 	@$(MAKE) setup-node
 	@$(MAKE) setup-git-hooks
@@ -60,14 +58,6 @@ setup-env: ## Setup - Create environment file from template
 		cp .env.example .env; \
 		echo "$(YELLOW)Please edit .env with your configuration$(RESET)"; \
 	fi
-
-setup-go: ## Setup - Install Go dependencies and tools
-	@echo "$(BLUE)Setting up Go dependencies...$(RESET)"
-	@go version || (echo "$(RED)Go $(GO_VERSION) not installed$(RESET)" && exit 1)
-	@go mod download
-	@go mod tidy
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	@go install github.com/air-verse/air@latest
 
 setup-python: ## Setup - Install Python dependencies and tools
 	@echo "$(BLUE)Setting up Python dependencies...$(RESET)"
@@ -98,23 +88,7 @@ dev: ## Development - Start development environment
 
 dev-services: ## Development - Start all services for development
 	@echo "$(BLUE)Starting development services...$(RESET)"
-	@trap 'docker-compose down' INT; \
-	concurrently --names "API,Web-Python,Web-Node" --prefix name --kill-others \
-		"$(MAKE) dev-api" \
-		"$(MAKE) dev-web-python" \
-		"$(MAKE) dev-web-node"
-
-dev-api: ## Development - Start Go API in development mode
-	@echo "$(BLUE)Starting Go API...$(RESET)"
-	@cd apps/api && air
-
-dev-web-python: ## Development - Start Python web app in development mode
-	@echo "$(BLUE)Starting Python web app...$(RESET)"
-	@cd apps/web && python app.py
-
-dev-web-node: ## Development - Start Node.js web app in development mode
-	@echo "$(BLUE)Starting Node.js web app...$(RESET)"
-	@cd web && npm run dev
+	@docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 dev-db: ## Development - Start only database services
 	@docker-compose up -d postgres redis
@@ -128,14 +102,9 @@ dev-full: ## Development - Start full development stack
 # Testing Commands
 test: ## Testing - Run all tests
 	@echo "$(BLUE)Running all tests...$(RESET)"
-	@$(MAKE) test-go
 	@$(MAKE) test-python
 	@$(MAKE) test-node
 	@echo "$(GREEN)All tests completed!$(RESET)"
-
-test-go: ## Testing - Run Go tests
-	@echo "$(BLUE)Running Go tests...$(RESET)"
-	@go test -v -race -coverprofile=coverage-go.out ./...
 
 test-python: ## Testing - Run Python tests
 	@echo "$(BLUE)Running Python tests...$(RESET)"
@@ -154,22 +123,15 @@ test-integration: ## Testing - Run integration tests
 test-coverage: ## Testing - Generate coverage reports
 	@$(MAKE) test
 	@echo "$(GREEN)Coverage reports generated:$(RESET)"
-	@echo "  Go: coverage-go.out"
 	@echo "  Python: coverage-python.xml, htmlcov-python/"
 	@echo "  Node.js: coverage/"
 
 # Build Commands
 build: ## Build - Build all applications
 	@echo "$(BLUE)Building all applications...$(RESET)"
-	@$(MAKE) build-go
 	@$(MAKE) build-python
 	@$(MAKE) build-node
 	@echo "$(GREEN)All builds completed!$(RESET)"
-
-build-go: ## Build - Build Go applications
-	@echo "$(BLUE)Building Go applications...$(RESET)"
-	@mkdir -p bin
-	@go build -ldflags "-X main.version=$(VERSION)" -o bin/api ./apps/api
 
 build-python: ## Build - Build Python applications
 	@echo "$(BLUE)Building Python applications...$(RESET)"
@@ -182,21 +144,18 @@ build-node: ## Build - Build Node.js applications
 
 build-production: ## Build - Build for production with optimizations
 	@echo "$(BLUE)Building for production...$(RESET)"
-	@CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags "-w -s -X main.version=$(VERSION)" -o bin/api ./apps/api
 	@cd web && npm run build
 
 # Docker Commands
 docker-build: ## Docker - Build all Docker images
 	@echo "$(BLUE)Building Docker images...$(RESET)"
-	@docker build -t $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-api:$(VERSION) -f apps/api/Dockerfile .
-	@docker build -t $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-web:$(VERSION) -f web/Dockerfile web/
-	@docker build -t $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-python:$(VERSION) -f apps/web/Dockerfile .
+	@docker build -t $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-flask-backend:$(VERSION) -f services/flask-backend/Dockerfile .
+	@docker build -t $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-webui:$(VERSION) -f services/webui/Dockerfile .
 
 docker-push: ## Docker - Push Docker images to registry
 	@echo "$(BLUE)Pushing Docker images...$(RESET)"
-	@docker push $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-api:$(VERSION)
-	@docker push $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-web:$(VERSION)
-	@docker push $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-python:$(VERSION)
+	@docker push $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-flask-backend:$(VERSION)
+	@docker push $(DOCKER_REGISTRY)/$(DOCKER_ORG)/$(PROJECT_NAME)-webui:$(VERSION)
 
 docker-run: ## Docker - Run application with Docker Compose
 	@docker-compose up --build
@@ -209,13 +168,8 @@ docker-clean: ## Docker - Clean up Docker resources
 # Code Quality Commands
 lint: ## Code Quality - Run linting for all languages
 	@echo "$(BLUE)Running linting...$(RESET)"
-	@$(MAKE) lint-go
 	@$(MAKE) lint-python
 	@$(MAKE) lint-node
-
-lint-go: ## Code Quality - Run Go linting
-	@echo "$(BLUE)Linting Go code...$(RESET)"
-	@golangci-lint run
 
 lint-python: ## Code Quality - Run Python linting
 	@echo "$(BLUE)Linting Python code...$(RESET)"
@@ -229,14 +183,8 @@ lint-node: ## Code Quality - Run Node.js linting
 
 format: ## Code Quality - Format code for all languages
 	@echo "$(BLUE)Formatting code...$(RESET)"
-	@$(MAKE) format-go
 	@$(MAKE) format-python
 	@$(MAKE) format-node
-
-format-go: ## Code Quality - Format Go code
-	@echo "$(BLUE)Formatting Go code...$(RESET)"
-	@go fmt ./...
-	@goimports -w .
 
 format-python: ## Code Quality - Format Python code
 	@echo "$(BLUE)Formatting Python code...$(RESET)"
@@ -251,11 +199,11 @@ format-node: ## Code Quality - Format Node.js code
 # Database Commands
 db-migrate: ## Database - Run database migrations
 	@echo "$(BLUE)Running database migrations...$(RESET)"
-	@go run scripts/migrate.go
+	@echo "Database migrations are handled by PyDAL in Flask backend"
 
 db-seed: ## Database - Seed database with test data
 	@echo "$(BLUE)Seeding database...$(RESET)"
-	@go run scripts/seed.go
+	@echo "Database seeding is handled by Flask backend initialization"
 
 db-reset: ## Database - Reset database (WARNING: destroys data)
 	@echo "$(RED)WARNING: This will destroy all data!$(RESET)"
@@ -278,7 +226,7 @@ db-restore: ## Database - Restore database from backup (requires BACKUP_FILE)
 # License Commands
 license-validate: ## License - Validate license configuration
 	@echo "$(BLUE)Validating license configuration...$(RESET)"
-	@go run scripts/license-validate.go
+	@echo "License validation is configured via environment variables"
 
 license-test: ## License - Test license server integration
 	@echo "$(BLUE)Testing license server integration...$(RESET)"
@@ -345,7 +293,6 @@ clean: ## Clean - Clean build artifacts and caches
 	@rm -rf htmlcov-python/
 	@rm -rf coverage-*.out
 	@rm -rf coverage-*.xml
-	@go clean -cache -modcache
 
 clean-docker: ## Clean - Clean Docker resources
 	@$(MAKE) docker-clean
@@ -357,7 +304,6 @@ clean-all: ## Clean - Clean everything (build artifacts, Docker, etc.)
 # Security Commands
 security-scan: ## Security - Run security scans
 	@echo "$(BLUE)Running security scans...$(RESET)"
-	@go list -json -m all | nancy sleuth
 	@safety check --json
 
 audit: ## Security - Run security audit
@@ -398,14 +344,12 @@ info: ## Info - Show project information
 	@echo "$(BLUE)Project Information:$(RESET)"
 	@echo "Name: $(PROJECT_NAME)"
 	@echo "Version: $(VERSION)"
-	@echo "Go Version: $(GO_VERSION)"
 	@echo "Python Version: $(PYTHON_VERSION)"
 	@echo "Node Version: $(NODE_VERSION)"
 	@echo ""
 	@echo "$(BLUE)Service URLs:$(RESET)"
-	@echo "API: http://localhost:8080"
-	@echo "Python Web: http://localhost:8000"
-	@echo "Node Web: http://localhost:3000"
+	@echo "Flask Backend: http://localhost:5000"
+	@echo "WebUI: http://localhost:3000"
 	@echo "Prometheus: http://localhost:9090"
 	@echo "Grafana: http://localhost:3001"
 

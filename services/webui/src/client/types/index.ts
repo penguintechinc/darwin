@@ -81,3 +81,75 @@ export interface Tab {
   label: string;
   content?: React.ReactNode;
 }
+
+// PR Review types
+export type ReviewStatus = 'pending' | 'approved' | 'changes_requested' | 'commented';
+export type IssueSeverity = 'critical' | 'high' | 'medium' | 'low';
+export type IssueStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export interface PullRequest {
+  id: number;
+  number: number;
+  title: string;
+  description: string;
+  repository: string;
+  author: string;
+  status: ReviewStatus;
+  created_at: string;
+  updated_at: string;
+  url: string;
+}
+
+export interface ReviewComment {
+  id: number;
+  author: string;
+  content: string;
+  created_at: string;
+  line?: number;
+  file?: string;
+}
+
+export interface Review {
+  id: number;
+  pull_request_id: number;
+  pull_request: PullRequest;
+  reviewer: string;
+  status: ReviewStatus;
+  comments: ReviewComment[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Issue {
+  id: number;
+  title: string;
+  description: string;
+  repository: string;
+  severity: IssueSeverity;
+  status: IssueStatus;
+  assigned_to?: string;
+  created_at: string;
+  updated_at: string;
+  url: string;
+}
+
+export interface RepositoryConfig {
+  id: number;
+  name: string;
+  url: string;
+  access_token?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewMetrics {
+  total_reviews: number;
+  approved: number;
+  changes_requested: number;
+  pending: number;
+  avg_review_time: number;
+  total_issues: number;
+  critical_issues: number;
+  recent_activity: Array<{ date: string; count: number }>;
+}

@@ -27,7 +27,7 @@ def create_app(config_class: type = Config) -> Flask:
     with app.app_context():
         init_db(app)
 
-    # Register blueprints
+    # Register blueprints - existing
     from .auth import auth_bp
     from .users import users_bp
     from .hello import hello_bp
@@ -35,6 +35,27 @@ def create_app(config_class: type = Config) -> Flask:
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(users_bp, url_prefix="/api/v1/users")
     app.register_blueprint(hello_bp, url_prefix="/api/v1")
+
+    # Register blueprints - PR Reviewer API
+    from .api.v1.reviews import reviews_bp
+    from .api.v1.webhooks import webhooks_bp
+    from .api.v1.repos import repos_bp
+    from .api.v1.issues import issues_bp
+    from .api.v1.credentials import credentials_bp
+    from .api.v1.configs import configs_bp
+    from .api.v1.providers import providers_bp
+    from .api.v1.analytics import analytics_bp
+    from .api.v1.licenses import licenses_bp
+
+    app.register_blueprint(reviews_bp, url_prefix="/api/v1/reviews")
+    app.register_blueprint(webhooks_bp, url_prefix="/api/v1/webhooks")
+    app.register_blueprint(repos_bp, url_prefix="/api/v1/repos")
+    app.register_blueprint(issues_bp, url_prefix="/api/v1/issues")
+    app.register_blueprint(credentials_bp, url_prefix="/api/v1/credentials")
+    app.register_blueprint(configs_bp, url_prefix="/api/v1/configs")
+    app.register_blueprint(providers_bp, url_prefix="/api/v1/providers")
+    app.register_blueprint(analytics_bp, url_prefix="/api/v1/analytics")
+    app.register_blueprint(licenses_bp, url_prefix="/api/v1/licenses")
 
     # Health check endpoint
     @app.route("/healthz")

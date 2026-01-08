@@ -18,8 +18,6 @@ resources:
 - ../../manifests/secrets.yaml
 - ../../manifests/flask-backend/deployment.yaml
 - ../../manifests/flask-backend/service.yaml
-- ../../manifests/go-backend/deployment.yaml
-- ../../manifests/go-backend/service.yaml
 - ../../manifests/webui/deployment.yaml
 - ../../manifests/webui/service.yaml
 - ../../manifests/webui/ingress.yaml
