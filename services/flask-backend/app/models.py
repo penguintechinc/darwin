@@ -21,6 +21,7 @@ def init_db(app: Flask) -> DAL:
         db_uri,
         pool_size=Config.DB_POOL_SIZE,
         migrate=True,
+        fake_migrate=False,
         check_reserved=["all"],
         lazy_tables=False,
     )
@@ -94,7 +95,7 @@ def init_db(app: Flask) -> DAL:
         Field("title", "string", length=255),
         Field("body", "text"),
         Field("suggestion", "text"),
-        Field("source", "string", length=64),
+        Field("review_source", "string", length=64),
         Field("linter_rule_id", "string", length=128),
         Field("platform_comment_id", "string", length=128),
         Field("status", "string", default="open", requires=IS_IN_SET(
@@ -463,7 +464,7 @@ def list_reviews(platform: Optional[str] = None,
 
 def create_comment(review_id: int, file_path: str, line_start: int,
                   line_end: int, category: str, severity: str,
-                  title: str, body: str, source: str,
+                  title: str, body: str, review_source: str,
                   suggestion: Optional[str] = None,
                   linter_rule_id: Optional[str] = None) -> dict:
     """Create a new review comment."""
@@ -477,7 +478,7 @@ def create_comment(review_id: int, file_path: str, line_start: int,
         severity=severity,
         title=title,
         body=body,
-        source=source,
+        review_source=review_source,
         suggestion=suggestion,
         linter_rule_id=linter_rule_id,
     )
@@ -878,3 +879,78 @@ def check_repo_limit(has_professional_license: bool) -> tuple[bool, int, int]:
     can_add = current_count < free_limit
 
     return can_add, current_count, free_limit
+
+
+# ===========================
+# AI Configuration Helper Functions
+# ===========================
+
+
+def get_ai_enabled() -> bool:
+    """
+    Get AI enabled status with fallback hierarchy.
+
+    Priority: Database -> Environment -> Default (True)
+
+    Returns:
+        bool: True if AI is enabled, False otherwise
+    """
+    # Check database first
+    db_value = get_config_value("ai_enabled", default=None)
+    if db_value is not None:
+        return db_value.lower() == "true"
+
+    # Fall back to environment variable
+    return Config.AI_ENABLED
+
+
+def set_ai_enabled(enabled: bool) -> None:
+    """
+    Set AI enabled status in database.
+
+    Args:
+        enabled: True to enable AI, False to disable
+    """
+    set_config_value("ai_enabled", "true" if enabled else "false")
+
+
+def delete_ai_config() -> None:
+    """
+    Delete AI config from database, reverting to environment variable default.
+    """
+    db = get_db()
+    db(db.installation_config.config_key == "ai_enabled").delete()
+    db.commit()
+
+
+def get_ai_config_source() -> str:
+    """
+    Get the source of the current AI configuration.
+
+    Returns:
+        str: "database", "environment", or "default"
+    """
+    db_value = get_config_value("ai_enabled", default=None)
+    if db_value is not None:
+        return "database"
+
+    # Check if environment variable is set
+    import os
+    if os.getenv("AI_ENABLED") is not None:
+        return "environment"
+
+    return "default"
+
+
+def initialize_ai_config() -> None:
+    """
+    Initialize AI config with default if not exists.
+
+    This is called on application startup to ensure the config key exists.
+    If no database value exists, it creates one based on the environment variable.
+    """
+    existing = get_config_value("ai_enabled", default=None)
+    if existing is None:
+        # Initialize with environment variable or default
+        default_value = "true" if Config.AI_ENABLED else "false"
+        set_config_value("ai_enabled", default_value)

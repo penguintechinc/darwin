@@ -85,6 +85,25 @@ make dev                      # Start development environment
 - Version management with semantic versioning
 - Feature branch workflow with required reviews
 
+## ☸️ Kubernetes Deployment
+
+### Quick Start
+```bash
+# Deploy to development (Kustomize)
+make k8s-deploy-dev
+
+# Or deploy using Helm
+make helm-install-dev
+
+# Check status
+make k8s-status-dev
+
+# Verify deployment
+./scripts/k8s-verify.sh
+```
+
+See [docs/KUBERNETES.md](docs/KUBERNETES.md) for comprehensive deployment guide.
+
 ## 📖 Documentation
 
 - **Getting Started**: [docs/development/](docs/development/)

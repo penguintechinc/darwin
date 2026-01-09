@@ -6,7 +6,7 @@ from prometheus_client import make_wsgi_app
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 from .config import Config
-from .models import init_db, get_db
+from .models import get_db, init_db, initialize_ai_config
 
 
 def create_app(config_class: type = Config) -> Flask:
@@ -26,6 +26,8 @@ def create_app(config_class: type = Config) -> Flask:
     # Initialize database
     with app.app_context():
         init_db(app)
+        # Initialize AI configuration with defaults
+        initialize_ai_config()
 
     # Register blueprints - existing
     from .auth import auth_bp
@@ -37,25 +39,27 @@ def create_app(config_class: type = Config) -> Flask:
     app.register_blueprint(hello_bp, url_prefix="/api/v1")
 
     # Register blueprints - PR Reviewer API
+    from .api.v1.ai_config import ai_config_bp
+    from .api.v1.analytics import analytics_bp
+    from .api.v1.configs import configs_bp
+    from .api.v1.credentials import credentials_bp
+    from .api.v1.issues import issues_bp
+    from .api.v1.licenses import licenses_bp
+    from .api.v1.providers import providers_bp
+    from .api.v1.repos import repos_bp
     from .api.v1.reviews import reviews_bp
     from .api.v1.webhooks import webhooks_bp
-    from .api.v1.repos import repos_bp
-    from .api.v1.issues import issues_bp
-    from .api.v1.credentials import credentials_bp
-    from .api.v1.configs import configs_bp
-    from .api.v1.providers import providers_bp
-    from .api.v1.analytics import analytics_bp
-    from .api.v1.licenses import licenses_bp
 
+    app.register_blueprint(ai_config_bp, url_prefix="/api/v1")
+    app.register_blueprint(analytics_bp, url_prefix="/api/v1/analytics")
+    app.register_blueprint(configs_bp, url_prefix="/api/v1/configs")
+    app.register_blueprint(credentials_bp, url_prefix="/api/v1/credentials")
+    app.register_blueprint(issues_bp, url_prefix="/api/v1/issues")
+    app.register_blueprint(licenses_bp, url_prefix="/api/v1/licenses")
+    app.register_blueprint(providers_bp, url_prefix="/api/v1/providers")
+    app.register_blueprint(repos_bp, url_prefix="/api/v1/repos")
     app.register_blueprint(reviews_bp, url_prefix="/api/v1/reviews")
     app.register_blueprint(webhooks_bp, url_prefix="/api/v1/webhooks")
-    app.register_blueprint(repos_bp, url_prefix="/api/v1/repos")
-    app.register_blueprint(issues_bp, url_prefix="/api/v1/issues")
-    app.register_blueprint(credentials_bp, url_prefix="/api/v1/credentials")
-    app.register_blueprint(configs_bp, url_prefix="/api/v1/configs")
-    app.register_blueprint(providers_bp, url_prefix="/api/v1/providers")
-    app.register_blueprint(analytics_bp, url_prefix="/api/v1/analytics")
-    app.register_blueprint(licenses_bp, url_prefix="/api/v1/licenses")
 
     # Health check endpoint
     @app.route("/healthz")

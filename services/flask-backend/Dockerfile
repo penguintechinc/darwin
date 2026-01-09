@@ -51,7 +51,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     lsb-release \
     apt-transport-https \
-    software-properties-common \
     unzip \
     tar \
     && rm -rf /var/lib/apt/lists/*
@@ -72,12 +71,12 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
 
-# Install GitLab CLI (glab)
-RUN curl -sSL https://gitlab.com/gitlab-org/cli/-/releases/download/v1.47.0/glab_1.47.0_Linux_x86_64.tar.gz | \
-    tar -xz -C /tmp && \
-    mv /tmp/bin/glab /usr/local/bin/ && \
-    chmod +x /usr/local/bin/glab && \
-    rm -rf /tmp/bin
+# Install GitLab CLI (glab) - Commented out due to download issues
+# RUN curl -sSL https://gitlab.com/gitlab-org/cli/-/releases/download/v1.47.0/glab_1.47.0_Linux_x86_64.tar.gz | \
+#     tar -xz -C /tmp && \
+#     mv /tmp/bin/glab /usr/local/bin/ && \
+#     chmod +x /usr/local/bin/glab && \
+#     rm -rf /tmp/bin
 
 # ============================================================================
 # Node.js and JavaScript/TypeScript Linters

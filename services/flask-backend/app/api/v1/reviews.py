@@ -14,6 +14,7 @@ from ...models import (
     get_detections_by_review,
     get_usage_by_review,
     get_db,
+    get_ai_enabled,
 )
 
 reviews_bp = Blueprint("reviews", __name__, url_prefix="/api/v1/reviews")
@@ -46,6 +47,13 @@ def create_review_request():
     existing = get_review_by_external_id(data.get("external_id"))
     if existing:
         return jsonify({"error": "Review with this external_id already exists"}), 409
+
+    # Check if AI is enabled if AI provider requested
+    if data.get("ai_provider") and not get_ai_enabled():
+        return jsonify({
+            "error": "AI reviews are currently disabled. Only linter reviews are available.",
+            "ai_enabled": False
+        }), 400
 
     # Create review
     categories = data.get("categories", [])

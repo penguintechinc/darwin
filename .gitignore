@@ -301,6 +301,7 @@ password.txt
 
 # Kubernetes
 *.kubeconfig
+k8s/manifests/secrets.yaml
 
 # Secrets and Keys
 secrets/

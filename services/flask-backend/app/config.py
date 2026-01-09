@@ -32,6 +32,9 @@ class Config:
     # CORS
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 
+    # AI Feature Flag
+    AI_ENABLED = os.getenv("AI_ENABLED", "true").lower() == "true"
+
     # AI Provider Configuration
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
