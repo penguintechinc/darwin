@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 
 from .auth import hash_password
-from .middleware import admin_required, auth_required
+from .middleware import admin_required, auth_required, get_current_user
 from .models import (
     VALID_ROLES,
     create_user,
@@ -180,8 +180,6 @@ def update_existing_user(user_id: int):
 @admin_required
 def delete_existing_user(user_id: int):
     """Delete user by ID (Admin only)."""
-    from .middleware import get_current_user
-
     current_user = get_current_user()
 
     # Prevent self-deletion

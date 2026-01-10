@@ -2,13 +2,12 @@
 
 from flask import Blueprint, jsonify, request
 
-from ...middleware import auth_required, admin_required
+from ...middleware import auth_required, admin_required, get_current_user
 from ...models import (
     store_credential,
     get_credentials,
     delete_credential,
     get_db,
-    get_current_user,
 )
 
 credentials_bp = Blueprint("credentials", __name__, url_prefix="/api/v1/credentials")
@@ -49,7 +48,6 @@ def create_credential():
         encrypted_credential = data.get("credential").encode()
 
     # Get current user
-    from ...middleware import get_current_user
     user = get_current_user()
 
     ssh_key_passphrase = None

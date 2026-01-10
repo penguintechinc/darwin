@@ -14,230 +14,451 @@ VALID_ROLES = ["admin", "maintainer", "viewer"]
 
 
 def init_db(app: Flask) -> DAL:
-    """Initialize database connection and define tables."""
+    """Initialize database connection and define tables with graceful migration handling."""
     db_uri = Config.get_db_uri()
 
-    db = DAL(
-        db_uri,
-        pool_size=Config.DB_POOL_SIZE,
-        migrate=True,
-        fake_migrate=False,
-        check_reserved=["all"],
-        lazy_tables=False,
-    )
+    try:
+        # First attempt: Try creating tables with migrate=True
+        db = DAL(
+            db_uri,
+            pool_size=Config.DB_POOL_SIZE,
+            migrate=True,
+            fake_migrate=False,
+            check_reserved=["all"],
+            lazy_tables=False,
+        )
 
-    # Define users table
-    db.define_table(
-        "users",
-        Field("email", "string", length=255, unique=True, requires=[
-            IS_NOT_EMPTY(error_message="Email is required"),
-            IS_EMAIL(error_message="Invalid email format"),
-        ]),
-        Field("password_hash", "string", length=255, requires=IS_NOT_EMPTY()),
-        Field("full_name", "string", length=255),
-        Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
-            VALID_ROLES,
-            error_message=f"Role must be one of: {', '.join(VALID_ROLES)}"
-        )),
-        Field("is_active", "boolean", default=True),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-    )
+        # Define users table
+        db.define_table(
+            "users",
+            Field("email", "string", length=255, unique=True, requires=[
+                IS_NOT_EMPTY(error_message="Email is required"),
+                IS_EMAIL(error_message="Invalid email format"),
+            ]),
+            Field("password_hash", "string", length=255, requires=IS_NOT_EMPTY()),
+            Field("full_name", "string", length=255),
+            Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
+                VALID_ROLES,
+                error_message=f"Role must be one of: {', '.join(VALID_ROLES)}"
+            )),
+            Field("is_active", "boolean", default=True),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        )
 
-    # Define refresh tokens table for token invalidation
-    db.define_table(
-        "refresh_tokens",
-        Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
-        Field("token_hash", "string", length=255, unique=True),
-        Field("expires_at", "datetime"),
-        Field("revoked", "boolean", default=False),
-        Field("created_at", "datetime", default=datetime.utcnow),
-    )
+        # Define refresh tokens table for token invalidation
+        db.define_table(
+            "refresh_tokens",
+            Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
+            Field("token_hash", "string", length=255, unique=True),
+            Field("expires_at", "datetime"),
+            Field("revoked", "boolean", default=False),
+            Field("created_at", "datetime", default=datetime.utcnow),
+        )
 
-    # Define reviews table - Main review requests
-    db.define_table(
-        "reviews",
-        Field("external_id", "string", length=64, unique=True),
-        Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
-        Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
-        Field("pull_request_id", "integer"),
-        Field("pull_request_url", "string", length=512),
-        Field("base_sha", "string", length=64),
-        Field("head_sha", "string", length=64),
-        Field("review_type", "string", requires=IS_IN_SET(["differential", "whole"])),
-        Field("categories", "json"),
-        Field("ai_provider", "string", length=64),
-        Field("status", "string", default="queued", requires=IS_IN_SET(
-            ["queued", "in_progress", "completed", "failed", "cancelled"]
-        )),
-        Field("error_message", "text"),
-        Field("files_reviewed", "integer", default=0),
-        Field("comments_posted", "integer", default=0),
-        Field("started_at", "datetime"),
-        Field("completed_at", "datetime"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-    )
+        # Define reviews table - Main review requests
+        db.define_table(
+            "reviews",
+            Field("external_id", "string", length=64, unique=True),
+            Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
+            Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
+            Field("pull_request_id", "integer"),
+            Field("pull_request_url", "string", length=512),
+            Field("base_sha", "string", length=64),
+            Field("head_sha", "string", length=64),
+            Field("review_type", "string", requires=IS_IN_SET(["differential", "whole"])),
+            Field("categories", "json"),
+            Field("ai_provider", "string", length=64),
+            Field("status", "string", default="queued", requires=IS_IN_SET(
+                ["queued", "in_progress", "completed", "failed", "cancelled"]
+            )),
+            Field("error_message", "text"),
+            Field("files_reviewed", "integer", default=0),
+            Field("comments_posted", "integer", default=0),
+            Field("started_at", "datetime"),
+            Field("completed_at", "datetime"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        )
 
-    # Define review_comments table - Individual review comments
-    db.define_table(
-        "review_comments",
-        Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-        Field("file_path", "string", length=512),
-        Field("line_start", "integer"),
-        Field("line_end", "integer"),
-        Field("category", "string", requires=IS_IN_SET(
-            ["security", "best_practices", "framework", "iac"]
-        )),
-        Field("severity", "string", requires=IS_IN_SET(
-            ["critical", "major", "minor", "suggestion"]
-        )),
-        Field("title", "string", length=255),
-        Field("body", "text"),
-        Field("suggestion", "text"),
-        Field("review_source", "string", length=64),
-        Field("linter_rule_id", "string", length=128),
-        Field("platform_comment_id", "string", length=128),
-        Field("status", "string", default="open", requires=IS_IN_SET(
-            ["open", "acknowledged", "fixed", "wont_fix", "false_positive"]
-        )),
-        Field("posted_at", "datetime"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-    )
+        # Define review_comments table - Individual review comments
+        db.define_table(
+            "review_comments",
+            Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+            Field("file_path", "string", length=512),
+            Field("line_start", "integer"),
+            Field("line_end", "integer"),
+            Field("category", "string", requires=IS_IN_SET(
+                ["security", "best_practices", "framework", "iac"]
+            )),
+            Field("severity", "string", requires=IS_IN_SET(
+                ["critical", "major", "minor", "suggestion"]
+            )),
+            Field("title", "string", length=255),
+            Field("body", "text"),
+            Field("suggestion", "text"),
+            Field("review_source", "string", length=64),
+            Field("linter_rule_id", "string", length=128),
+            Field("platform_comment_id", "string", length=128),
+            Field("status", "string", default="open", requires=IS_IN_SET(
+                ["open", "acknowledged", "fixed", "wont_fix", "false_positive"]
+            )),
+            Field("posted_at", "datetime"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+        )
 
-    # Define review_detections table - Detected languages/frameworks per review
-    db.define_table(
-        "review_detections",
-        Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-        Field("detection_type", "string"),
-        Field("name", "string", length=128),
-        Field("confidence", "double"),
-        Field("file_count", "integer"),
-    )
+        # Define review_detections table - Detected languages/frameworks per review
+        db.define_table(
+            "review_detections",
+            Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+            Field("detection_type", "string"),
+            Field("name", "string", length=128),
+            Field("confidence", "double"),
+            Field("file_count", "integer"),
+        )
 
-    # Define repo_configs table - Per-repository configuration
-    db.define_table(
-        "repo_configs",
-        Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
-        Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
-        Field("enabled", "boolean", default=True),
-        Field("auto_review", "boolean", default=True),
-        Field("review_on_open", "boolean", default=True),
-        Field("review_on_sync", "boolean", default=False),
-        Field("default_categories", "json"),
-        Field("default_ai_provider", "string", length=64),
-        Field("ignored_paths", "json"),
-        Field("custom_rules", "json"),
-        Field("webhook_secret", "string", length=255),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        format="%(platform)s/%(repository)s",
-    )
+        # Define repo_configs table - Per-repository configuration
+        db.define_table(
+            "repo_configs",
+            Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
+            Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
+            Field("enabled", "boolean", default=True),
+            Field("auto_review", "boolean", default=True),
+            Field("review_on_open", "boolean", default=True),
+            Field("review_on_sync", "boolean", default=False),
+            Field("default_categories", "json"),
+            Field("default_ai_provider", "string", length=64),
+            Field("ignored_paths", "json"),
+            Field("custom_rules", "json"),
+            Field("webhook_secret", "string", length=255),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+            format="%(platform)s/%(repository)s",
+        )
 
-    # Define provider_usage table - AI token usage tracking
-    db.define_table(
-        "provider_usage",
-        Field("review_id", "reference reviews"),
-        Field("provider", "string", length=64),
-        Field("model", "string", length=128),
-        Field("prompt_tokens", "integer"),
-        Field("completion_tokens", "integer"),
-        Field("total_tokens", "integer"),
-        Field("latency_ms", "integer"),
-        Field("cost_estimate", "double"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-    )
+        # Define provider_usage table - AI token usage tracking
+        db.define_table(
+            "provider_usage",
+            Field("review_id", "reference reviews"),
+            Field("provider", "string", length=64),
+            Field("model", "string", length=128),
+            Field("prompt_tokens", "integer"),
+            Field("completion_tokens", "integer"),
+            Field("total_tokens", "integer"),
+            Field("latency_ms", "integer"),
+            Field("cost_estimate", "double"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+        )
 
-    # Define git_credentials table - Secure credential storage
-    db.define_table(
-        "git_credentials",
-        Field("name", "string", length=128),
-        Field("git_url_pattern", "string", length=255),
-        Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
-        Field("encrypted_credential", "blob"),
-        Field("ssh_key_passphrase", "blob"),
-        Field("created_by", "reference users"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-    )
+        # Define git_credentials table - Secure credential storage
+        db.define_table(
+            "git_credentials",
+            Field("name", "string", length=128),
+            Field("git_url_pattern", "string", length=255),
+            Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
+            Field("encrypted_credential", "blob"),
+            Field("ssh_key_passphrase", "blob"),
+            Field("created_by", "reference users"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        )
 
-    # Define ai_model_config table - AI model preferences per category
-    db.define_table(
-        "ai_model_config",
-        Field("config_name", "string", length=128, unique=True, default="default"),
-        Field("security_enabled", "boolean", default=True),
-        Field("security_model", "string", length=128, default="granite-code:34b"),
-        Field("best_practices_enabled", "boolean", default=True),
-        Field("best_practices_model", "string", length=128, default="llama3.3:70b"),
-        Field("framework_enabled", "boolean", default=True),
-        Field("framework_model", "string", length=128, default="codestral:22b"),
-        Field("iac_enabled", "boolean", default=True),
-        Field("iac_model", "string", length=128, default="granite-code:20b"),
-        Field("fallback_model", "string", length=128, default="starcoder2:15b"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        format="%(config_name)s",
-    )
+        # Define ai_model_config table - AI model preferences per category
+        db.define_table(
+            "ai_model_config",
+            Field("config_name", "string", length=128, unique=True, default="default"),
+            Field("security_enabled", "boolean", default=True),
+            Field("security_model", "string", length=128, default="granite-code:34b"),
+            Field("best_practices_enabled", "boolean", default=True),
+            Field("best_practices_model", "string", length=128, default="llama3.3:70b"),
+            Field("framework_enabled", "boolean", default=True),
+            Field("framework_model", "string", length=128, default="codestral:22b"),
+            Field("iac_enabled", "boolean", default=True),
+            Field("iac_model", "string", length=128, default="granite-code:20b"),
+            Field("fallback_model", "string", length=128, default="starcoder2:15b"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+            format="%(config_name)s",
+        )
 
-    # Define license_policies table - License policy configuration
-    db.define_table(
-        "license_policies",
-        Field("license_name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
-        Field("policy", "string", default="allowed", requires=IS_IN_SET(
-            ["allowed", "blocked", "review_required"]
-        )),
-        Field("actions", "json", default=["warn"]),
-        Field("description", "text"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        format="%(license_name)s",
-    )
+        # Define license_policies table - License policy configuration
+        db.define_table(
+            "license_policies",
+            Field("license_name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
+            Field("policy", "string", default="allowed", requires=IS_IN_SET(
+                ["allowed", "blocked", "review_required"]
+            )),
+            Field("actions", "json", default=["warn"]),
+            Field("description", "text"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+            format="%(license_name)s",
+        )
 
-    # Define license_detections table - Detected licenses per review
-    db.define_table(
-        "license_detections",
-        Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-        Field("package_name", "string", length=255),
-        Field("package_version", "string", length=128),
-        Field("license_name", "string", length=255),
-        Field("license_source", "string", length=64),
-        Field("file_path", "string", length=512),
-        Field("confidence", "double"),
-        Field("policy_violation", "boolean", default=False),
-        Field("created_at", "datetime", default=datetime.utcnow),
-    )
+        # Define license_detections table - Detected licenses per review
+        db.define_table(
+            "license_detections",
+            Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+            Field("package_name", "string", length=255),
+            Field("package_version", "string", length=128),
+            Field("license_name", "string", length=255),
+            Field("license_source", "string", length=64),
+            Field("file_path", "string", length=512),
+            Field("confidence", "double"),
+            Field("policy_violation", "boolean", default=False),
+            Field("created_at", "datetime", default=datetime.utcnow),
+        )
 
-    # Define license_violations table - License policy violations
-    db.define_table(
-        "license_violations",
-        Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-        Field("detection_id", "reference license_detections"),
-        Field("license_name", "string", length=255),
-        Field("package_name", "string", length=255),
-        Field("policy", "string"),
-        Field("severity", "string", default="warning", requires=IS_IN_SET(
-            ["critical", "warning", "info"]
-        )),
-        Field("actions_taken", "json"),
-        Field("status", "string", default="open", requires=IS_IN_SET(
-            ["open", "acknowledged", "resolved", "suppressed"]
-        )),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-    )
+        # Define license_violations table - License policy violations
+        db.define_table(
+            "license_violations",
+            Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+            Field("detection_id", "reference license_detections"),
+            Field("license_name", "string", length=255),
+            Field("package_name", "string", length=255),
+            Field("policy", "string"),
+            Field("severity", "string", default="warning", requires=IS_IN_SET(
+                ["critical", "warning", "info"]
+            )),
+            Field("actions_taken", "json"),
+            Field("status", "string", default="open", requires=IS_IN_SET(
+                ["open", "acknowledged", "resolved", "suppressed"]
+            )),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        )
 
-    # Define installation_config table - Installation-level configuration
-    db.define_table(
-        "installation_config",
-        Field("config_key", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
-        Field("config_value", "text"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        format="%(config_key)s",
-    )
+        # Define installation_config table - Installation-level configuration
+        db.define_table(
+            "installation_config",
+            Field("config_key", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
+            Field("config_value", "text"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+            format="%(config_key)s",
+        )
 
-    # Commit table definitions
-    db.commit()
+        # Commit table definitions
+        db.commit()
+
+    except Exception as e:
+        # If migration fails (likely due to existing tables), reconnect with fake_migrate
+        error_msg = str(e).lower()
+        if "already exists" in error_msg or "duplicate" in error_msg:
+            print(f"Tables already exist, syncing schema with fake_migrate_all=True")
+
+            # Reconnect with fake migration to sync existing schema
+            db = DAL(
+                db_uri,
+                pool_size=Config.DB_POOL_SIZE,
+                migrate=False,
+                fake_migrate_all=True,
+                check_reserved=["all"],
+                lazy_tables=False,
+            )
+
+            # Define tables again (without creating them, just syncing schema)
+            db.define_table(
+                "users",
+                Field("email", "string", length=255, unique=True, requires=[
+                    IS_NOT_EMPTY(error_message="Email is required"),
+                    IS_EMAIL(error_message="Invalid email format"),
+                ]),
+                Field("password_hash", "string", length=255, requires=IS_NOT_EMPTY()),
+                Field("full_name", "string", length=255),
+                Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
+                    VALID_ROLES,
+                    error_message=f"Role must be one of: {', '.join(VALID_ROLES)}"
+                )),
+                Field("is_active", "boolean", default=True),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+            )
+
+            db.define_table(
+                "refresh_tokens",
+                Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
+                Field("token_hash", "string", length=255, unique=True),
+                Field("expires_at", "datetime"),
+                Field("revoked", "boolean", default=False),
+                Field("created_at", "datetime", default=datetime.utcnow),
+            )
+
+            db.define_table(
+                "reviews",
+                Field("external_id", "string", length=64, unique=True),
+                Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
+                Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
+                Field("pull_request_id", "integer"),
+                Field("pull_request_url", "string", length=512),
+                Field("base_sha", "string", length=64),
+                Field("head_sha", "string", length=64),
+                Field("review_type", "string", requires=IS_IN_SET(["differential", "whole"])),
+                Field("categories", "json"),
+                Field("ai_provider", "string", length=64),
+                Field("status", "string", default="queued", requires=IS_IN_SET(
+                    ["queued", "in_progress", "completed", "failed", "cancelled"]
+                )),
+                Field("error_message", "text"),
+                Field("files_reviewed", "integer", default=0),
+                Field("comments_posted", "integer", default=0),
+                Field("started_at", "datetime"),
+                Field("completed_at", "datetime"),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+            )
+
+            db.define_table(
+                "review_comments",
+                Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+                Field("file_path", "string", length=512),
+                Field("line_start", "integer"),
+                Field("line_end", "integer"),
+                Field("category", "string", requires=IS_IN_SET(
+                    ["security", "best_practices", "framework", "iac"]
+                )),
+                Field("severity", "string", requires=IS_IN_SET(
+                    ["critical", "major", "minor", "suggestion"]
+                )),
+                Field("title", "string", length=255),
+                Field("body", "text"),
+                Field("suggestion", "text"),
+                Field("review_source", "string", length=64),
+                Field("linter_rule_id", "string", length=128),
+                Field("platform_comment_id", "string", length=128),
+                Field("status", "string", default="open", requires=IS_IN_SET(
+                    ["open", "acknowledged", "fixed", "wont_fix", "false_positive"]
+                )),
+                Field("posted_at", "datetime"),
+                Field("created_at", "datetime", default=datetime.utcnow),
+            )
+
+            db.define_table(
+                "review_detections",
+                Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+                Field("detection_type", "string"),
+                Field("name", "string", length=128),
+                Field("confidence", "double"),
+                Field("file_count", "integer"),
+            )
+
+            db.define_table(
+                "repo_configs",
+                Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
+                Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
+                Field("enabled", "boolean", default=True),
+                Field("auto_review", "boolean", default=True),
+                Field("review_on_open", "boolean", default=True),
+                Field("review_on_sync", "boolean", default=False),
+                Field("default_categories", "json"),
+                Field("default_ai_provider", "string", length=64),
+                Field("ignored_paths", "json"),
+                Field("custom_rules", "json"),
+                Field("webhook_secret", "string", length=255),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+                format="%(platform)s/%(repository)s",
+            )
+
+            db.define_table(
+                "provider_usage",
+                Field("review_id", "reference reviews"),
+                Field("provider", "string", length=64),
+                Field("model", "string", length=128),
+                Field("prompt_tokens", "integer"),
+                Field("completion_tokens", "integer"),
+                Field("total_tokens", "integer"),
+                Field("latency_ms", "integer"),
+                Field("cost_estimate", "double"),
+                Field("created_at", "datetime", default=datetime.utcnow),
+            )
+
+            db.define_table(
+                "git_credentials",
+                Field("name", "string", length=128),
+                Field("git_url_pattern", "string", length=255),
+                Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
+                Field("encrypted_credential", "blob"),
+                Field("ssh_key_passphrase", "blob"),
+                Field("created_by", "reference users"),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+            )
+
+            db.define_table(
+                "ai_model_config",
+                Field("config_name", "string", length=128, unique=True, default="default"),
+                Field("security_enabled", "boolean", default=True),
+                Field("security_model", "string", length=128, default="granite-code:34b"),
+                Field("best_practices_enabled", "boolean", default=True),
+                Field("best_practices_model", "string", length=128, default="llama3.3:70b"),
+                Field("framework_enabled", "boolean", default=True),
+                Field("framework_model", "string", length=128, default="codestral:22b"),
+                Field("iac_enabled", "boolean", default=True),
+                Field("iac_model", "string", length=128, default="granite-code:20b"),
+                Field("fallback_model", "string", length=128, default="starcoder2:15b"),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+                format="%(config_name)s",
+            )
+
+            db.define_table(
+                "license_policies",
+                Field("license_name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
+                Field("policy", "string", default="allowed", requires=IS_IN_SET(
+                    ["allowed", "blocked", "review_required"]
+                )),
+                Field("actions", "json", default=["warn"]),
+                Field("description", "text"),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+                format="%(license_name)s",
+            )
+
+            db.define_table(
+                "license_detections",
+                Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+                Field("package_name", "string", length=255),
+                Field("package_version", "string", length=128),
+                Field("license_name", "string", length=255),
+                Field("license_source", "string", length=64),
+                Field("file_path", "string", length=512),
+                Field("confidence", "double"),
+                Field("policy_violation", "boolean", default=False),
+                Field("created_at", "datetime", default=datetime.utcnow),
+            )
+
+            db.define_table(
+                "license_violations",
+                Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+                Field("detection_id", "reference license_detections"),
+                Field("license_name", "string", length=255),
+                Field("package_name", "string", length=255),
+                Field("policy", "string"),
+                Field("severity", "string", default="warning", requires=IS_IN_SET(
+                    ["critical", "warning", "info"]
+                )),
+                Field("actions_taken", "json"),
+                Field("status", "string", default="open", requires=IS_IN_SET(
+                    ["open", "acknowledged", "resolved", "suppressed"]
+                )),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+            )
+
+            db.define_table(
+                "installation_config",
+                Field("config_key", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
+                Field("config_value", "text"),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+                format="%(config_key)s",
+            )
+
+            db.commit()
+        else:
+            # Re-raise if it's a different kind of error
+            raise
 
     # Store db instance in app
     app.config["db"] = db
@@ -837,24 +1058,63 @@ def update_violation_status(violation_id: int, status: str) -> Optional[dict]:
 
 
 def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
-    """Get installation config value."""
-    db = get_db()
-    config = db(db.installation_config.config_key == key).select().first()
-    return config.config_value if config else default
+    """
+    Get installation config value with fallback to default.
+
+    Returns the default value when installation_config table doesn't exist.
+
+    Args:
+        key: Configuration key to retrieve
+        default: Default value if key not found or table doesn't exist
+
+    Returns:
+        Configuration value or default
+    """
+    try:
+        db = get_db()
+        config = db(db.installation_config.config_key == key).select().first()
+        return config.config_value if config else default
+    except Exception as e:
+        # Handle missing installation_config table
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
+            # Table doesn't exist yet, return default value
+            return default
+        else:
+            # Re-raise other types of database errors
+            raise
 
 
 def set_config_value(key: str, value: str) -> None:
-    """Set installation config value."""
-    db = get_db()
+    """
+    Set installation config value with graceful fallback.
 
-    existing = db(db.installation_config.config_key == key).select().first()
+    Silently skips when installation_config table doesn't exist.
 
-    if existing:
-        db(db.installation_config.config_key == key).update(config_value=value)
-    else:
-        db.installation_config.insert(config_key=key, config_value=value)
+    Args:
+        key: Configuration key to set
+        value: Configuration value to store
+    """
+    try:
+        db = get_db()
 
-    db.commit()
+        existing = db(db.installation_config.config_key == key).select().first()
+
+        if existing:
+            db(db.installation_config.config_key == key).update(config_value=value)
+        else:
+            db.installation_config.insert(config_key=key, config_value=value)
+
+        db.commit()
+    except Exception as e:
+        # Handle missing installation_config table
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
+            # Table doesn't exist yet, silently skip (will be available after migrations)
+            pass
+        else:
+            # Re-raise other types of database errors
+            raise
 
 
 def get_repo_count() -> int:
@@ -895,10 +1155,20 @@ def get_ai_enabled() -> bool:
     Returns:
         bool: True if AI is enabled, False otherwise
     """
-    # Check database first
-    db_value = get_config_value("ai_enabled", default=None)
-    if db_value is not None:
-        return db_value.lower() == "true"
+    try:
+        # Check database first
+        db_value = get_config_value("ai_enabled", default=None)
+        if db_value is not None:
+            return db_value.lower() == "true"
+    except Exception as e:
+        # Handle missing installation_config table
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
+            # Table doesn't exist yet, fall back to environment variable
+            pass
+        else:
+            # Re-raise other types of database errors
+            raise
 
     # Fall back to environment variable
     return Config.AI_ENABLED
@@ -911,16 +1181,36 @@ def set_ai_enabled(enabled: bool) -> None:
     Args:
         enabled: True to enable AI, False to disable
     """
-    set_config_value("ai_enabled", "true" if enabled else "false")
+    try:
+        set_config_value("ai_enabled", "true" if enabled else "false")
+    except Exception as e:
+        # Handle missing installation_config table
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
+            # Table doesn't exist yet, silently skip (will be available after migrations)
+            pass
+        else:
+            # Re-raise other types of database errors
+            raise
 
 
 def delete_ai_config() -> None:
     """
     Delete AI config from database, reverting to environment variable default.
     """
-    db = get_db()
-    db(db.installation_config.config_key == "ai_enabled").delete()
-    db.commit()
+    try:
+        db = get_db()
+        db(db.installation_config.config_key == "ai_enabled").delete()
+        db.commit()
+    except Exception as e:
+        # Handle missing installation_config table
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
+            # Table doesn't exist yet, silently succeed (nothing to delete)
+            pass
+        else:
+            # Re-raise other types of database errors
+            raise
 
 
 def get_ai_config_source() -> str:
@@ -930,9 +1220,19 @@ def get_ai_config_source() -> str:
     Returns:
         str: "database", "environment", or "default"
     """
-    db_value = get_config_value("ai_enabled", default=None)
-    if db_value is not None:
-        return "database"
+    try:
+        db_value = get_config_value("ai_enabled", default=None)
+        if db_value is not None:
+            return "database"
+    except Exception as e:
+        # Handle missing installation_config table
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
+            # Table doesn't exist yet, check environment or return default
+            pass
+        else:
+            # Re-raise other types of database errors
+            raise
 
     # Check if environment variable is set
     import os
@@ -948,9 +1248,26 @@ def initialize_ai_config() -> None:
 
     This is called on application startup to ensure the config key exists.
     If no database value exists, it creates one based on the environment variable.
+
+    Handles the case where the installation_config table doesn't exist yet
+    (on first startup or during migrations).
     """
-    existing = get_config_value("ai_enabled", default=None)
-    if existing is None:
-        # Initialize with environment variable or default
-        default_value = "true" if Config.AI_ENABLED else "false"
-        set_config_value("ai_enabled", default_value)
+    db = get_db()
+    try:
+        existing = get_config_value("ai_enabled", default=None)
+        if existing is None:
+            # Initialize with environment variable or default
+            default_value = "true" if Config.AI_ENABLED else "false"
+            set_config_value("ai_enabled", default_value)
+    except Exception as e:
+        # Rollback the transaction to clear error state
+        db.rollback()
+        # Table doesn't exist yet - this is normal on first startup
+        # The table will be created on next restart or config can be set via API
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str or "failed sql transaction" in error_str:
+            print(f"Installation config table not yet created, skipping initialization. "
+                  f"AI configuration can be set later via API.")
+        else:
+            # Re-raise other types of database errors
+            raise

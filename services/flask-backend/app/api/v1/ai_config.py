@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
-from ...middleware.auth import role_required
+from ...middleware import role_required
 from ...models import (
     delete_ai_config,
     get_ai_config_source,
@@ -15,7 +15,7 @@ ai_config_bp = Blueprint("ai_config", __name__)
 
 
 @ai_config_bp.route("/config/ai", methods=["GET"])
-@jwt_required()
+@jwt_required(optional=True)
 def get_ai_configuration():
     """
     Get current AI configuration status.
