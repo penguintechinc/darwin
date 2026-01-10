@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
       - name: webui
-        image: register.dal2.penguintech.io/darwin/webui:dev
+        image: registry-dal2.penguintech.io/darwin/webui:dev
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
@@ -46,7 +46,7 @@ spec:
         - name: PORT
           value: "3000"
         - name: FLASK_API_URL
-          value: "http://flask-backend:5000"
+          value: "/api"
         resources:
           limits:
             cpu: 500m
