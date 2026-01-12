@@ -218,6 +218,10 @@ _routes.json
 .cache/
 public
 
+# WebUI public assets (exception)
+!services/webui/public/
+!services/webui/public/**
+
 # Storybook build outputs
 .out
 .storybook-out

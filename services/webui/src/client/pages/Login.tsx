@@ -37,9 +37,13 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-950">
       <div className="w-full max-w-md">
-        {/* Logo/Title */}
+        {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gold-gradient mb-2">WebUI Shell</h1>
+          <img
+            src="/darwin-logo.png"
+            alt="Darwin AI PR Reviewer"
+            className="h-[300px] mx-auto mb-4"
+          />
           <p className="text-dark-400">Sign in to your account</p>
         </div>
 
