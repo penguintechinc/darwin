@@ -1,5 +1,7 @@
 # Project Template - Claude Code Context
 
+**⚠️ Important**: Application-specific context should be added to `docs/APP_STANDARDS.md` instead of this file. This allows the template CLAUDE.md to be updated across all projects without losing app-specific information. See `docs/APP_STANDARDS.md` for app-specific architecture, requirements, and context.
+
 ## Project Overview
 
 This is a comprehensive project template incorporating best practices and patterns from Penguin Tech Inc projects. It provides a standardized foundation for multi-language projects with enterprise-grade infrastructure and integrated licensing.
@@ -12,37 +14,6 @@ This is a comprehensive project template incorporating best practices and patter
 - Monitoring and observability
 - Version management system
 - PenguinTech License Server integration
-
-## Darwin AI PR Reviewer - Production Deployment
-
-**Production URL**: https://darwin.penguintech.io
-
-**Deployment Environment**:
-- Kubernetes cluster: k8s01-dal2, k8s02-dal2 (control-plane), svr03-dal2 (worker)
-- Namespace: `darwin-dev`
-- Ingress: Nginx with Cloudflare wildcard TLS certificate
-- Registry: `registry-dal2.penguintech.io`
-
-**Services**:
-- Flask Backend: `flask-backend:5000` - API, authentication, PR review orchestration
-- WebUI: `webui:3000` - React frontend shell
-- PostgreSQL: `postgresql:5432` - Primary database
-- Redis: `redis:6379` - Cache and session storage
-- Ollama: `ollama.ollama.svc.cluster.local:11434` - AI models (granite-code, llama3.3, codestral, starcoder2)
-
-**Testing URLs**:
-- WebUI: https://darwin.penguintech.io
-- API: https://darwin.penguintech.io/api/v1/config/ai
-- Health: https://darwin.penguintech.io/api/v1/health
-
-**Default Login Credentials**:
-- Email: `admin@example.com`
-- Password: `admin123`
-- ⚠️ Change password after first login
-
-**Image Tags**:
-- Development: `registry-dal2.penguintech.io/darwin/{service}:dev`
-- Build versioning: WebUI logs build timestamp to browser console
 
 ## Technology Stack
 
@@ -109,11 +80,12 @@ This is a comprehensive project template incorporating best practices and patter
 
 ### Security & Authentication
 - **Flask-Security-Too**: Mandatory for all Flask applications
-  - Role-based access control (RBAC)
+  - Role-based access control (RBAC) with OAuth2-style scopes
   - User authentication and session management
   - Password hashing with bcrypt
   - Email confirmation and password reset
   - Two-factor authentication (2FA)
+- **Permissions Model**: Global, container/team, and resource-level roles with custom scope-based permissions
 - **TLS**: Enforce TLS 1.2 minimum, prefer TLS 1.3
 - **HTTP3/QUIC**: Utilize UDP with TLS for high-performance connections where possible
 - **Authentication**: JWT and MFA (standard), mTLS where applicable
@@ -487,9 +459,11 @@ Comprehensive development standards are documented separately to keep this file 
 **API Versioning**:
 - ALL REST APIs MUST use versioning: `/api/v{major}/endpoint` format
 - Semantic versioning for major versions only in URL
-- Support current and previous versions (N-1) minimum
+- Support current and 2 previous versions (N-2) minimum
 - Add deprecation headers to old versions
 - Document migration paths for version changes
+- Keep APIs simple and extensible: use flexible inputs, backward-compatible responses
+- Leverage and reuse existing APIs where possible
 
 **Database Standards**:
 - SQLAlchemy for database initialization and schema creation only
@@ -500,15 +474,26 @@ Comprehensive development standards are documented separately to keep this file 
 - Connection pooling and retry logic required
 - Async/multi-threading based on workload (see Performance Optimization)
 
+**API Design Principles**:
+- **Simple & Extensible**: Keep REST and gRPC APIs simple, use flexible input structures and backward-compatible responses
+- **Leverage Existing**: Reuse existing APIs where possible, avoid creating duplicate endpoints
+- **Consistent Versioning**: All APIs use `/api/v{major}/endpoint` versioning for REST and semantic versioning for gRPC
+- **Deprecation Support**: Maintain N-2 API versions minimum (current + 2 previous), include deprecation headers and migration paths
+
 **Protocol Support**:
-- **Inter-container communication** (within cluster): gRPC or HTTP/3 (QUIC) preferred
-  - Lower latency, better performance, binary protocols
-  - Use for service-to-service calls between containers
-- **External communication** (clients, integrations): REST API over HTTPS
+- **External Communication** (clients, third-party integrations): REST API over HTTPS
   - Flask REST endpoints for client-facing APIs
-  - Used for outside-of-cluster integrations and third-party access
+  - Supports external consumers and web UIs
+  - Versioned: `/api/v1/endpoint`, `/api/v2/endpoint`, etc.
+- **Inter-Container Communication** (within cluster): gRPC preferred for best performance
+  - Service-to-service calls between containers in same namespace/cluster
+  - Binary protocol with Protocol Buffers for lower latency and bandwidth
+  - Use for internal APIs between microservices
+  - Fallback to REST over HTTP/2 if gRPC unavailable
+- **HTTP/3 (QUIC)**: Consider for high-performance inter-container scenarios (>10K req/sec)
+  - UDP-based, reduced latency, connection multiplexing
 - Environment variables for protocol configuration
-- Multi-protocol implementation required
+- Multi-protocol implementation: REST for external, gRPC for internal
 
 **Performance Optimization (Python):**
 - Dataclasses with slots mandatory (30-50% memory reduction)
@@ -661,7 +646,23 @@ docker compose up -d --build <service-name>
 
 **IMPORTANT:** `docker compose restart` and `docker restart` do NOT apply code changes - they only restart the existing container with old code. Always use `--build` to rebuild images with new code.
 
+**Browser Cache & Hard Reload During Development:**
+- Developers will routinely perform hard reloads (Ctrl+Shift+R / Cmd+Shift+R) and cache clearing during development
+- DO NOT assume the browser cache contains stale assets or that developers haven't already cleared it
+- Implement proper cache headers and asset versioning in your frontend/static assets
+- Use content-based cache busting (e.g., hashing filenames: `app.abc123.js`) for production builds
+- Consider setting `Cache-Control: no-cache, must-revalidate` for development builds when appropriate
+
 📚 **Complete CI/CD documentation**: [Workflows](docs/WORKFLOWS.md) | [Standards](docs/STANDARDS.md)
+
+## Template Customization
+
+**Adding Languages/Services**: Create in `services/`, add Dockerfile, update CI/CD, add linting/testing, update docs.
+
+**Enterprise Integration**: License server, multi-tenancy, usage tracking, audit logging, monitoring.
+
+📚 **Detailed customization guides**: [Development Standards](docs/STANDARDS.md)
+
 
 ## License & Legal
 
@@ -671,13 +672,6 @@ docker compose up -d --build <service-name>
 
 The `LICENSE.md` file is located at the project root following industry standards. This project uses a modified AGPL-3.0 license with additional exceptions for commercial use and special provisions for companies employing contributors.
 
-## Template Customization
-
-**Adding Languages/Services**: Create in `services/`, add Dockerfile, update CI/CD, add linting/testing, update docs.
-
-**Enterprise Integration**: License server, multi-tenancy, usage tracking, audit logging, monitoring.
-
-📚 **Detailed customization guides**: [Development Standards](docs/STANDARDS.md)
 
 ---
 
