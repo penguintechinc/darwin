@@ -35,6 +35,11 @@ This is a comprehensive project template incorporating best practices and patter
 - API: https://darwin.penguintech.io/api/v1/config/ai
 - Health: https://darwin.penguintech.io/api/v1/health
 
+**Default Login Credentials**:
+- Email: `admin@example.com`
+- Password: `admin123`
+- ⚠️ Change password after first login
+
 **Image Tags**:
 - Development: `registry-dal2.penguintech.io/darwin/{service}:dev`
 - Build versioning: WebUI logs build timestamp to browser console
