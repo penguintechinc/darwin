@@ -344,6 +344,8 @@ junit.xml
 
 # Version management
 .version.backup
+.buildtime
+*.buildtime
 
 # Development tools
 .air.toml

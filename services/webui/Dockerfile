@@ -4,6 +4,9 @@
 # Build stage
 FROM node:22-bookworm-slim AS builder
 
+ARG BUILD_TIME
+ENV VITE_BUILD_TIME=${BUILD_TIME}
+
 WORKDIR /app
 
 # Copy package files
@@ -15,11 +18,15 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build the application with build time embedded
+RUN npm run build && \
+    echo "WebUI built at: ${BUILD_TIME:-unknown}"
 
 # Production stage
 FROM node:22-bookworm-slim AS production
+
+ARG BUILD_TIME
+ENV BUILD_TIME=${BUILD_TIME}
 
 WORKDIR /app
 
@@ -34,6 +41,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
+
+# Create build info file
+RUN echo "{\"buildTime\":\"${BUILD_TIME:-unknown}\",\"buildDate\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > /app/dist/build-info.json
 
 # Set ownership
 RUN chown -R webui:webui /app
