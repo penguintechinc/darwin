@@ -40,7 +40,7 @@ def create_default_admin():
     user_count = db(db.users).count()
 
     if user_count == 0:
-        admin_email = os.getenv("DEFAULT_ADMIN_EMAIL", "admin@example.com")
+        admin_email = os.getenv("DEFAULT_ADMIN_EMAIL", "admin@localhost.local")
         admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
 
         # Check if admin already exists (shouldn't, but safety check)

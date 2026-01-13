@@ -15,6 +15,37 @@ This is a comprehensive project template incorporating best practices and patter
 - Version management system
 - PenguinTech License Server integration
 
+## Darwin AI PR Reviewer - Production Deployment
+
+**Production URL**: https://darwin.penguintech.io
+
+**Deployment Environment**:
+- Kubernetes cluster: k8s01-dal2, k8s02-dal2 (control-plane), svr03-dal2 (worker)
+- Namespace: `darwin-dev`
+- Ingress: Nginx with Cloudflare wildcard TLS certificate
+- Registry: `registry-dal2.penguintech.io`
+
+**Services**:
+- Flask Backend: `flask-backend:5000` - API, authentication, PR review orchestration
+- WebUI: `webui:3000` - React frontend shell
+- PostgreSQL: `postgresql:5432` - Primary database
+- Redis: `redis:6379` - Cache and session storage
+- Ollama: `ollama.ollama.svc.cluster.local:11434` - AI models (granite-code, llama3.3, codestral, starcoder2)
+
+**Testing URLs**:
+- WebUI: https://darwin.penguintech.io
+- API: https://darwin.penguintech.io/api/v1/config/ai
+- Health: https://darwin.penguintech.io/api/v1/health
+
+**Default Login Credentials**:
+- Email: `admin@localhost.local`
+- Password: `admin123`
+- ⚠️ Change password after first login
+
+**Image Tags**:
+- Development: `registry-dal2.penguintech.io/darwin/{service}:dev`
+- Build versioning: WebUI logs build timestamp to browser console
+
 ## Technology Stack
 
 ### Languages & Frameworks
