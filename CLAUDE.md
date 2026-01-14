@@ -15,37 +15,6 @@ This is a comprehensive project template incorporating best practices and patter
 - Version management system
 - PenguinTech License Server integration
 
-## Darwin AI PR Reviewer - Production Deployment
-
-**Production URL**: https://darwin.penguintech.io
-
-**Deployment Environment**:
-- Kubernetes cluster: k8s01-dal2, k8s02-dal2 (control-plane), svr03-dal2 (worker)
-- Namespace: `darwin-dev`
-- Ingress: Nginx with Cloudflare wildcard TLS certificate
-- Registry: `registry-dal2.penguintech.io`
-
-**Services**:
-- Flask Backend: `flask-backend:5000` - API, authentication, PR review orchestration
-- WebUI: `webui:3000` - React frontend shell
-- PostgreSQL: `postgresql:5432` - Primary database
-- Redis: `redis:6379` - Cache and session storage
-- Ollama: `ollama.ollama.svc.cluster.local:11434` - AI models (granite-code, llama3.3, codestral, starcoder2)
-
-**Testing URLs**:
-- WebUI: https://darwin.penguintech.io
-- API: https://darwin.penguintech.io/api/v1/config/ai
-- Health: https://darwin.penguintech.io/api/v1/health
-
-**Default Login Credentials**:
-- Email: `admin@localhost.local`
-- Password: `admin123`
-- ⚠️ Change password after first login
-
-**Image Tags**:
-- Development: `registry-dal2.penguintech.io/darwin/{service}:dev`
-- Build versioning: WebUI logs build timestamp to browser console
-
 ## Technology Stack
 
 ### Languages & Frameworks
@@ -107,7 +76,7 @@ This is a comprehensive project template incorporating best practices and patter
 - **Migrations**: PyDAL handles all migrations via `migrate=True`
 - **MariaDB Galera Support**: Handle Galera-specific requirements (WSREP, auto-increment, transactions)
 
-📚 **Supported DB_TYPE Values**: See [Development Standards - Database Standards](docs/STANDARDS.md#database-standards) for complete list and configuration details.
+📚 **Supported DB_TYPE Values**: See [Database Standards](docs/standards/DATABASE.md) for complete list and configuration details.
 
 ### Security & Authentication
 - **Flask-Security-Too**: Mandatory for all Flask applications
@@ -212,7 +181,7 @@ project-name/
 
 **Default Roles**: Admin (full access), Maintainer (read/write, no user mgmt), Viewer (read-only)
 
-📚 **Architecture diagram and details**: [Development Standards - Microservices Architecture](docs/STANDARDS.md#microservices-architecture)
+📚 **Architecture diagram and details**: [Architecture Standards](docs/standards/ARCHITECTURE.md)
 
 ## Version Management System
 
@@ -481,9 +450,13 @@ make license-check-features  # Check available features
 
 ## Development Standards
 
-Comprehensive development standards are documented separately to keep this file concise.
+**⚠️ Documentation Structure:**
+- **Company-wide standards**: [docs/STANDARDS.md](docs/STANDARDS.md) (index) + [docs/standards/](docs/standards/) (detailed categories)
+- **App-specific standards**: [docs/APP_STANDARDS.md](docs/APP_STANDARDS.md) (application-specific architecture, requirements, context)
 
-📚 **Complete Standards Documentation**: [Development Standards](docs/STANDARDS.md)
+Comprehensive development standards are organized by category in `docs/standards/` directory. The main STANDARDS.md serves as an index with quick reference.
+
+📚 **Complete Standards Documentation**: [Development Standards](docs/STANDARDS.md) (index to 12 category files)
 
 ### Quick Reference
 
@@ -554,7 +527,7 @@ Comprehensive development standards are documented separately to keep this file 
 - **DO NOT include MarchProxy in default deployment** - it's external infrastructure
 - **Generate MarchProxy-compatible import configuration** in `config/marchproxy/`
 - Import config via MarchProxy's API: `POST /api/v1/services/import`
-- See [Development Standards - MarchProxy Integration](docs/STANDARDS.md#marchproxy-api-gateway-integration)
+- See [Integration Standards - MarchProxy](docs/standards/INTEGRATIONS.md)
 
 **Docker Standards**:
 - Multi-arch builds (amd64/arm64)
@@ -604,11 +577,11 @@ Comprehensive development standards are documented separately to keep this file 
 - Resilience
 - Continuous deployment
 
-📚 **Detailed Architecture Patterns**: See [Development Standards - Microservices Architecture](docs/STANDARDS.md#microservices-architecture)
+📚 **Detailed Architecture Patterns**: See [Architecture Standards](docs/standards/ARCHITECTURE.md)
 
 ## Common Integration Patterns
 
-📚 **Complete code examples and integration patterns**: [Development Standards](docs/STANDARDS.md)
+📚 **Complete code examples and integration patterns**: [Standards Index](docs/STANDARDS.md) | [Authentication](docs/standards/AUTHENTICATION.md) | [Database](docs/standards/DATABASE.md)
 
 Key integration patterns documented:
 - Flask + Flask-Security-Too + PyDAL authentication
@@ -633,7 +606,7 @@ Key integration patterns documented:
 
 **Support**: support@penguintech.io | sales@penguintech.io | https://status.penguintech.io
 
-📚 **Detailed troubleshooting**: [Development Standards](docs/STANDARDS.md) | [License Guide](docs/licensing/license-server-integration.md)
+📚 **Detailed troubleshooting**: [Standards Index](docs/STANDARDS.md) | [License Guide](docs/licensing/license-server-integration.md)
 
 ## CI/CD & Workflows
 
@@ -684,7 +657,7 @@ docker compose up -d --build <service-name>
 - Use content-based cache busting (e.g., hashing filenames: `app.abc123.js`) for production builds
 - Consider setting `Cache-Control: no-cache, must-revalidate` for development builds when appropriate
 
-📚 **Complete CI/CD documentation**: [Workflows](docs/WORKFLOWS.md) | [Standards](docs/STANDARDS.md)
+📚 **Complete CI/CD documentation**: [Workflows](docs/WORKFLOWS.md) | [Standards Index](docs/STANDARDS.md)
 
 ## Template Customization
 
@@ -692,7 +665,7 @@ docker compose up -d --build <service-name>
 
 **Enterprise Integration**: License server, multi-tenancy, usage tracking, audit logging, monitoring.
 
-📚 **Detailed customization guides**: [Development Standards](docs/STANDARDS.md)
+📚 **Detailed customization guides**: [Standards Index](docs/STANDARDS.md)
 
 
 ## License & Legal
