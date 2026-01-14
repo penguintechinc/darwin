@@ -50,3 +50,7 @@ data:
 
   # Celery Configuration
   DEFAULT_POLLING_INTERVAL_MINUTES: "5"
+
+  # Default Admin User
+  DEFAULT_ADMIN_EMAIL: "admin@localhost.local"
+  DEFAULT_ADMIN_PASSWORD: "admin123"

@@ -206,6 +206,16 @@ spec:
             configMapKeyRef:
               name: darwin-config
               key: REVIEW_TIMEOUT_SECONDS
+        - name: DEFAULT_ADMIN_EMAIL
+          valueFrom:
+            configMapKeyRef:
+              name: darwin-config
+              key: DEFAULT_ADMIN_EMAIL
+        - name: DEFAULT_ADMIN_PASSWORD
+          valueFrom:
+            configMapKeyRef:
+              name: darwin-config
+              key: DEFAULT_ADMIN_PASSWORD
         resources:
           limits:
             cpu: 1000m
