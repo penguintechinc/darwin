@@ -20,6 +20,7 @@ const navigation: NavCategory[] = [
     label: 'Management',
     roles: ['admin', 'maintainer'],
     items: [
+      { label: 'Repositories', path: '/repositories', icon: '📦', roles: ['admin', 'maintainer'] },
       { label: 'Settings', path: '/settings', icon: '⚙️', roles: ['admin', 'maintainer'] },
     ],
   },

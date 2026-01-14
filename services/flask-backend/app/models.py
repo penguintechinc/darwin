@@ -117,6 +117,20 @@ def init_db(app: Flask) -> DAL:
             Field("file_count", "integer"),
         )
 
+        # Define git_credentials table - Secure credential storage
+        # IMPORTANT: Must be defined before repo_configs which references it
+        db.define_table(
+            "git_credentials",
+            Field("name", "string", length=128),
+            Field("git_url_pattern", "string", length=255),
+            Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
+            Field("encrypted_credential", "blob"),
+            Field("ssh_key_passphrase", "blob"),
+            Field("created_by", "reference users"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        )
+
         # Define repo_configs table - Per-repository configuration
         db.define_table(
             "repo_configs",
@@ -131,9 +145,35 @@ def init_db(app: Flask) -> DAL:
             Field("ignored_paths", "json"),
             Field("custom_rules", "json"),
             Field("webhook_secret", "string", length=255),
+            # Polling configuration
+            Field("polling_enabled", "boolean", default=False),
+            Field("polling_interval_minutes", "integer", default=5),
+            Field("last_poll_at", "datetime"),
+            # Organization grouping (for dashboard drill-down)
+            Field("platform_organization", "string", length=255),
+            # Display settings
+            Field("display_name", "string", length=255),
+            Field("description", "text"),
+            Field("is_active", "boolean", default=True),
+            # Credential selection
+            Field("credential_id", "reference git_credentials", ondelete="SET NULL"),
+            # Advanced settings
+            Field("max_review_age_hours", "integer", default=168),  # 7 days
+            Field("skip_patterns", "json"),
             Field("created_at", "datetime", default=datetime.utcnow),
             Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
             format="%(platform)s/%(repository)s",
+        )
+
+        # Define repository_members table - Per-user repository access and credentials
+        db.define_table(
+            "repository_members",
+            Field("repository_id", "reference repo_configs", ondelete="CASCADE"),
+            Field("user_id", "reference users", ondelete="CASCADE"),
+            Field("role", "string", requires=IS_IN_SET(["viewer", "contributor", "admin"])),
+            Field("personal_token_id", "reference git_credentials", ondelete="SET NULL"),
+            Field("created_at", "datetime", default=datetime.utcnow),
+            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
         )
 
         # Define provider_usage table - AI token usage tracking
@@ -148,19 +188,6 @@ def init_db(app: Flask) -> DAL:
             Field("latency_ms", "integer"),
             Field("cost_estimate", "double"),
             Field("created_at", "datetime", default=datetime.utcnow),
-        )
-
-        # Define git_credentials table - Secure credential storage
-        db.define_table(
-            "git_credentials",
-            Field("name", "string", length=128),
-            Field("git_url_pattern", "string", length=255),
-            Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
-            Field("encrypted_credential", "blob"),
-            Field("ssh_key_passphrase", "blob"),
-            Field("created_by", "reference users"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
         )
 
         # Define ai_model_config table - AI model preferences per category
@@ -355,9 +382,34 @@ def init_db(app: Flask) -> DAL:
                 Field("ignored_paths", "json"),
                 Field("custom_rules", "json"),
                 Field("webhook_secret", "string", length=255),
+                # Polling configuration
+                Field("polling_enabled", "boolean", default=False),
+                Field("polling_interval_minutes", "integer", default=5),
+                Field("last_poll_at", "datetime"),
+                # Organization grouping (for dashboard drill-down)
+                Field("platform_organization", "string", length=255),
+                # Display settings
+                Field("display_name", "string", length=255),
+                Field("description", "text"),
+                Field("is_active", "boolean", default=True),
+                # Credential selection
+                Field("credential_id", "reference git_credentials", ondelete="SET NULL"),
+                # Advanced settings
+                Field("max_review_age_hours", "integer", default=168),  # 7 days
+                Field("skip_patterns", "json"),
                 Field("created_at", "datetime", default=datetime.utcnow),
                 Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
                 format="%(platform)s/%(repository)s",
+            )
+
+            db.define_table(
+                "repository_members",
+                Field("repository_id", "reference repo_configs", ondelete="CASCADE"),
+                Field("user_id", "reference users", ondelete="CASCADE"),
+                Field("role", "string", requires=IS_IN_SET(["viewer", "contributor", "admin"])),
+                Field("personal_token_id", "reference git_credentials", ondelete="SET NULL"),
+                Field("created_at", "datetime", default=datetime.utcnow),
+                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
             )
 
             db.define_table(
@@ -831,6 +883,105 @@ def list_repo_configs(platform: Optional[str] = None,
 
     configs = db(query).select(orderby=db.repo_configs.repository)
     return [c.as_dict() for c in configs]
+
+
+def create_repository(platform: str, repository: str, organization: Optional[str] = None,
+                     credential_id: Optional[int] = None, **kwargs) -> dict:
+    """Create a new repository configuration."""
+    db = get_db()
+    repo_id = db.repo_configs.insert(
+        platform=platform,
+        repository=repository,
+        platform_organization=organization,
+        credential_id=credential_id,
+        **kwargs
+    )
+    db.commit()
+    return get_repository_by_id(repo_id)
+
+
+def get_repository_by_id(repo_id: int) -> Optional[dict]:
+    """Get repository configuration by ID."""
+    db = get_db()
+    repo = db(db.repo_configs.id == repo_id).select().first()
+    return repo.as_dict() if repo else None
+
+
+def list_repositories(platform: Optional[str] = None,
+                     organization: Optional[str] = None,
+                     enabled: Optional[bool] = None,
+                     page: int = 1,
+                     per_page: int = 20) -> tuple[list[dict], int]:
+    """List repositories with filtering and pagination."""
+    db = get_db()
+    offset = (page - 1) * per_page
+
+    # Build query
+    query = db.repo_configs.id > 0
+    if platform:
+        query &= db.repo_configs.platform == platform
+    if organization:
+        query &= db.repo_configs.platform_organization == organization
+    if enabled is not None:
+        query &= db.repo_configs.enabled == enabled
+
+    repos = db(query).select(
+        orderby=~db.repo_configs.created_at,
+        limitby=(offset, offset + per_page),
+    )
+    total = db(query).count()
+
+    return [r.as_dict() for r in repos], total
+
+
+def update_repository(repo_id: int, **kwargs) -> Optional[dict]:
+    """Update repository configuration."""
+    db = get_db()
+    db(db.repo_configs.id == repo_id).update(**kwargs)
+    db.commit()
+    return get_repository_by_id(repo_id)
+
+
+def delete_repository(repo_id: int) -> bool:
+    """Delete repository configuration."""
+    db = get_db()
+    result = db(db.repo_configs.id == repo_id).delete()
+    db.commit()
+    return result > 0
+
+
+def get_repositories_by_organization(platform: str, organization: str) -> list[dict]:
+    """Get all repositories for a specific platform and organization."""
+    db = get_db()
+    repos = db(
+        (db.repo_configs.platform == platform) &
+        (db.repo_configs.platform_organization == organization)
+    ).select(orderby=db.repo_configs.repository)
+    return [r.as_dict() for r in repos]
+
+
+def get_unique_organizations() -> list[dict]:
+    """Get list of unique organizations grouped by platform."""
+    db = get_db()
+    # Query for unique platform/organization combinations
+    rows = db(db.repo_configs.platform_organization != None).select(
+        db.repo_configs.platform,
+        db.repo_configs.platform_organization,
+        distinct=True,
+        orderby=db.repo_configs.platform | db.repo_configs.platform_organization
+    )
+
+    # Group by platform
+    result = {}
+    for row in rows:
+        platform = row.platform
+        org = row.platform_organization
+        if platform not in result:
+            result[platform] = []
+        if org and org not in result[platform]:
+            result[platform].append(org)
+
+    return result
 
 
 # ===========================

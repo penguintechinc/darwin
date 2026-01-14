@@ -10,6 +10,7 @@ import Users from './pages/Users';
 import UserDetail from './pages/UserDetail';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import Repositories from './pages/Repositories';
 
 function App() {
   const { isAuthenticated, isLoading, checkAuth } = useAuth();
@@ -49,6 +50,16 @@ function App() {
 
         {/* Profile - all authenticated users */}
         <Route path="/profile" element={<Profile />} />
+
+        {/* Repositories - Maintainer and Admin */}
+        <Route
+          path="/repositories"
+          element={
+            <RoleGuard allowedRoles={['admin', 'maintainer']}>
+              <Repositories />
+            </RoleGuard>
+          }
+        />
 
         {/* Settings - Maintainer and Admin */}
         <Route

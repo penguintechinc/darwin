@@ -7,12 +7,17 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 from .config import Config
 from .models import get_db, init_db, initialize_ai_config
+from .celery_config import make_celery
 
 
 def create_app(config_class: type = Config) -> Flask:
     """Create and configure the Flask application."""
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    # Initialize Celery
+    celery = make_celery(app)
+    app.celery = celery
 
     # Initialize CORS
     CORS(app, resources={
@@ -43,10 +48,12 @@ def create_app(config_class: type = Config) -> Flask:
     from .api.v1.analytics import analytics_bp
     from .api.v1.configs import configs_bp
     from .api.v1.credentials import credentials_bp
+    from .api.v1.dashboard import dashboard_bp
     from .api.v1.issues import issues_bp
     from .api.v1.licenses import licenses_bp
     from .api.v1.providers import providers_bp
     from .api.v1.repos import repos_bp
+    from .api.v1.repositories import repositories_bp
     from .api.v1.reviews import reviews_bp
     from .api.v1.webhooks import webhooks_bp
 
@@ -54,10 +61,12 @@ def create_app(config_class: type = Config) -> Flask:
     app.register_blueprint(analytics_bp, url_prefix="/api/v1/analytics")
     app.register_blueprint(configs_bp, url_prefix="/api/v1/configs")
     app.register_blueprint(credentials_bp, url_prefix="/api/v1/credentials")
+    app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
     app.register_blueprint(issues_bp, url_prefix="/api/v1/issues")
     app.register_blueprint(licenses_bp, url_prefix="/api/v1/licenses")
     app.register_blueprint(providers_bp, url_prefix="/api/v1/providers")
     app.register_blueprint(repos_bp, url_prefix="/api/v1/repos")
+    app.register_blueprint(repositories_bp, url_prefix="/api/v1/repositories")
     app.register_blueprint(reviews_bp, url_prefix="/api/v1/reviews")
     app.register_blueprint(webhooks_bp, url_prefix="/api/v1/webhooks")
 

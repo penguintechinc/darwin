@@ -415,3 +415,39 @@ class GitLabClient:
             page += 1
 
         return commits
+
+    async def list_merge_requests(
+        self, project_id: str, state: str = "opened", per_page: int = 100
+    ) -> list[dict[str, Any]]:
+        """
+        List merge requests in a project.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            state: MR state (opened, closed, merged, all). Default: opened
+            per_page: Results per page (max 100)
+
+        Returns:
+            List of merge request data dictionaries
+        """
+        mrs = []
+        page = 1
+
+        while True:
+            data = await self._request(
+                "GET",
+                f"/projects/{project_id}/merge_requests",
+                params={"state": state, "page": page, "per_page": per_page},
+            )
+
+            if not data:
+                break
+
+            mrs.extend(data)
+
+            if len(data) < per_page:
+                break
+
+            page += 1
+
+        return mrs

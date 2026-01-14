@@ -153,3 +153,126 @@ export interface ReviewMetrics {
   critical_issues: number;
   recent_activity: Array<{ date: string; count: number }>;
 }
+
+// Repository Management types
+export type Platform = 'github' | 'gitlab' | 'git';
+export type FindingSeverity = 'critical' | 'major' | 'minor' | 'suggestion';
+
+export interface Repository {
+  id: number;
+  platform: Platform;
+  repository: string;
+  platform_organization?: string;
+  display_name?: string;
+  description?: string;
+  enabled: boolean;
+  polling_enabled: boolean;
+  polling_interval_minutes: number;
+  auto_review: boolean;
+  review_on_open: boolean;
+  review_on_sync: boolean;
+  webhook_secret?: string;
+  credential_id?: number;
+  default_categories?: string[];
+  default_ai_provider?: string;
+  last_poll_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRepositoryData {
+  platform: Platform;
+  repository: string;
+  platform_organization?: string;
+  display_name?: string;
+  description?: string;
+  enabled?: boolean;
+  polling_enabled?: boolean;
+  polling_interval_minutes?: number;
+  auto_review?: boolean;
+  credential_id?: number;
+  default_categories?: string[];
+  default_ai_provider?: string;
+}
+
+export interface UpdateRepositoryData {
+  platform?: Platform;
+  repository?: string;
+  platform_organization?: string;
+  display_name?: string;
+  description?: string;
+  enabled?: boolean;
+  polling_enabled?: boolean;
+  polling_interval_minutes?: number;
+  auto_review?: boolean;
+  credential_id?: number;
+  default_categories?: string[];
+  default_ai_provider?: string;
+}
+
+export interface RepositoryListResponse {
+  repositories: Repository[];
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface OrganizationsResponse {
+  organizations: Record<string, string[]>;
+}
+
+// Dashboard Analytics types
+export interface DashboardStats {
+  overview: {
+    total_repositories: number;
+    total_reviews: number;
+    pending_reviews: number;
+  };
+  findings: {
+    critical: number;
+    major: number;
+    minor: number;
+    suggestion: number;
+  };
+  platforms: Record<string, number>;
+}
+
+export interface Finding {
+  id: number;
+  review_id: number;
+  file_path: string;
+  line_start: number;
+  line_end: number;
+  severity: FindingSeverity;
+  category: string;
+  title: string;
+  body: string;
+  suggestion?: string;
+  created_at: string;
+  repository: {
+    id: number;
+    name: string;
+    platform: Platform;
+    display_name?: string;
+  };
+}
+
+export interface FindingsResponse {
+  findings: Finding[];
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface DashboardFilters {
+  platform?: Platform;
+  organization?: string;
+  repository_id?: number;
+  severity?: FindingSeverity;
+}
