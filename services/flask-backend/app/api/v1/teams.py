@@ -108,7 +108,14 @@ def list_teams():
     end = start + per_page
     paginated_rows = rows[start:end]
 
-    teams = [serialize_team(row) for row in paginated_rows]
+    # Enrich with member counts
+    teams = []
+    for row in paginated_rows:
+        team_dict = serialize_team(row)
+        # Count members
+        member_count = db(db.team_members.team_id == row.id).count()
+        team_dict["member_count"] = member_count
+        teams.append(team_dict)
 
     return jsonify({
         "teams": teams,

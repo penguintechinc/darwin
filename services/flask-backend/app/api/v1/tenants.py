@@ -59,9 +59,24 @@ def list_tenants():
     db = get_db()
     tenants = db(db.tenants).select(orderby=db.tenants.created_at)
 
+    # Enrich with member and team counts
+    result = []
+    for tenant in tenants:
+        tenant_dict = tenant.as_dict()
+
+        # Count members
+        member_count = db(db.tenant_members.tenant_id == tenant.id).count()
+        tenant_dict["member_count"] = member_count
+
+        # Count teams
+        team_count = db(db.teams.tenant_id == tenant.id).count()
+        tenant_dict["team_count"] = team_count
+
+        result.append(tenant_dict)
+
     return jsonify({
-        "tenants": [t.as_dict() for t in tenants],
-        "total": len(tenants),
+        "tenants": result,
+        "total": len(result),
     }), 200
 
 
