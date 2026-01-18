@@ -11,6 +11,9 @@ import UserDetail from './pages/UserDetail';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Repositories from './pages/Repositories';
+import Tenants from './pages/Tenants';
+import Teams from './pages/Teams';
+import Roles from './pages/Roles';
 
 function App() {
   const { isAuthenticated, isLoading, checkAuth } = useAuth();
@@ -85,6 +88,36 @@ function App() {
           element={
             <RoleGuard allowedRoles={['admin']}>
               <UserDetail />
+            </RoleGuard>
+          }
+        />
+
+        {/* Tenant management - Admin only */}
+        <Route
+          path="/tenants"
+          element={
+            <RoleGuard allowedRoles={['admin']}>
+              <Tenants />
+            </RoleGuard>
+          }
+        />
+
+        {/* Team management - Admin and Maintainer */}
+        <Route
+          path="/teams"
+          element={
+            <RoleGuard allowedRoles={['admin', 'maintainer']}>
+              <Teams />
+            </RoleGuard>
+          }
+        />
+
+        {/* Role management - Admin only */}
+        <Route
+          path="/roles"
+          element={
+            <RoleGuard allowedRoles={['admin']}>
+              <Roles />
             </RoleGuard>
           }
         />

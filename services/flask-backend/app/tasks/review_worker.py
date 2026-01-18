@@ -205,6 +205,13 @@ async def _execute_review(
             if repo_config.get("auto_review", True):
                 for comment in review_result.comments:
                     try:
+                        # Format body with GitHub's native suggestion format
+                        body = f"**{comment.title}**\n\n{comment.body}"
+
+                        # Add GitHub suggested change if available
+                        if comment.suggestion:
+                            body += f"\n\n```suggestion\n{comment.suggestion}\n```"
+
                         await client.create_review_comment(
                             owner=owner,
                             repo=repo,
@@ -212,8 +219,7 @@ async def _execute_review(
                             commit_sha=review["head_sha"],
                             path=comment.file_path,
                             line=comment.line_end,
-                            body=f"**{comment.title}**\n\n{comment.body}"
-                            + (f"\n\n**Suggestion:**\n```\n{comment.suggestion}\n```" if comment.suggestion else ""),
+                            body=body,
                         )
                     except Exception as e:
                         print(f"Failed to post comment to GitHub: {e}")
@@ -279,11 +285,21 @@ async def _execute_review(
             if repo_config.get("auto_review", True):
                 for comment in review_result.comments:
                     try:
+                        # Format body with GitLab's native suggestion format
+                        body = f"**{comment.title}**\n\n{comment.body}"
+
+                        # Add GitLab suggested change if available
+                        # GitLab uses ```suggestion:-X+Y syntax where X=lines to remove, Y=lines to add
+                        if comment.suggestion:
+                            # Calculate line range
+                            lines_affected = comment.line_end - comment.line_start + 1
+                            # Suggestion replaces the affected lines
+                            body += f"\n\n```suggestion:-{lines_affected}+0\n{comment.suggestion}\n```"
+
                         await client.create_discussion(
                             project_id=project_id,
                             mr_number=mr_number,
-                            body=f"**{comment.title}**\n\n{comment.body}"
-                            + (f"\n\n**Suggestion:**\n```\n{comment.suggestion}\n```" if comment.suggestion else ""),
+                            body=body,
                             position={
                                 "base_sha": review["base_sha"],
                                 "start_sha": review["base_sha"],

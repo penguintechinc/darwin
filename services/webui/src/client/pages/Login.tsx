@@ -10,6 +10,7 @@ interface LocationState {
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [tenant, setTenant] = useState('default');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -25,7 +26,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await login({ email, password });
+      await login({ email, password, tenant });
       navigate(from, { replace: true });
     } catch (err) {
       setError('Invalid email or password');
@@ -55,6 +56,25 @@ export default function Login() {
                 {error}
               </div>
             )}
+
+            <div>
+              <label htmlFor="tenant" className="block text-sm font-medium text-gold-400 mb-2">
+                Tenant
+              </label>
+              <input
+                id="tenant"
+                type="text"
+                value={tenant}
+                onChange={(e) => setTenant(e.target.value)}
+                className="input"
+                placeholder="default"
+                required
+                autoComplete="organization"
+              />
+              <p className="mt-1 text-xs text-dark-500">
+                Enter tenant slug (default: "default")
+              </p>
+            </div>
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gold-400 mb-2">

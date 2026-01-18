@@ -152,3 +152,33 @@ export const dashboardApi = {
     return response.data;
   },
 };
+
+// Configuration API
+export const configApi = {
+  get: async (): Promise<any> => {
+    const response = await api.get('/config');
+    return response.data;
+  },
+
+  update: async (config: any): Promise<void> => {
+    await api.put('/config', config);
+  },
+};
+
+// Elder Integration API
+export const elderApi = {
+  push: async (filters?: { repository_filter?: string; severity_filter?: string; category_filter?: string }): Promise<any> => {
+    const response = await api.post('/integrations/elder', filters || {});
+    return response.data;
+  },
+
+  test: async (): Promise<any> => {
+    const response = await api.post('/integrations/elder/test');
+    return response.data;
+  },
+
+  getStats: async (): Promise<any> => {
+    const response = await api.get('/integrations/elder/stats');
+    return response.data;
+  },
+};

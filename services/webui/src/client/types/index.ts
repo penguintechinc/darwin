@@ -30,6 +30,7 @@ export interface UpdateUserData {
 export interface LoginCredentials {
   email: string;
   password: string;
+  tenant?: string;  // Tenant slug, defaults to "default"
 }
 
 export interface AuthTokens {
@@ -275,4 +276,80 @@ export interface DashboardFilters {
   organization?: string;
   repository_id?: number;
   severity?: FindingSeverity;
+}
+
+// Tenant types
+export interface Tenant {
+  id: number;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  member_count?: number;
+  team_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTenantData {
+  name: string;
+  slug: string;
+  is_active?: boolean;
+}
+
+export interface UpdateTenantData {
+  name?: string;
+  slug?: string;
+  is_active?: boolean;
+}
+
+export interface TenantMember {
+  id: number;
+  tenant_id: number;
+  user_id: number;
+  role: UserRole;
+  user?: User;
+  created_at: string;
+}
+
+export interface AddTenantMemberData {
+  user_id: number;
+  role: UserRole;
+}
+
+// Team types
+export interface Team {
+  id: number;
+  tenant_id: number;
+  name: string;
+  slug: string;
+  is_default: boolean;
+  member_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTeamData {
+  name: string;
+  slug: string;
+  is_default?: boolean;
+}
+
+export interface UpdateTeamData {
+  name?: string;
+  slug?: string;
+  is_default?: boolean;
+}
+
+export interface TeamMember {
+  id: number;
+  team_id: number;
+  user_id: number;
+  role: UserRole;
+  user?: User;
+  created_at: string;
+}
+
+export interface AddTeamMemberData {
+  user_id: number;
+  role: UserRole;
 }

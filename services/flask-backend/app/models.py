@@ -14,503 +14,380 @@ VALID_ROLES = ["admin", "maintainer", "viewer"]
 
 
 def init_db(app: Flask) -> DAL:
-    """Initialize database connection and define tables with graceful migration handling."""
+    """Initialize database connection and define tables using PyDAL's built-in migration handling."""
     db_uri = Config.get_db_uri()
 
-    try:
-        # First attempt: Try creating tables with migrate=True
-        db = DAL(
-            db_uri,
-            pool_size=Config.DB_POOL_SIZE,
-            migrate=True,
-            fake_migrate=False,
-            check_reserved=["all"],
-            lazy_tables=False,
-        )
+    # Initialize database with migration support
+    # Note: Using fake_migrate_all=True to handle concurrent worker initialization
+    # This allows multiple gunicorn workers to start simultaneously without conflicts
+    # Migration files stored in /tmp since /app may be read-only in containers
+    import os
+    migration_folder = os.environ.get("PYDAL_MIGRATION_FOLDER", "/tmp/pydal_migrations")
+    os.makedirs(migration_folder, exist_ok=True)
 
-        # Define users table
-        db.define_table(
-            "users",
-            Field("email", "string", length=255, unique=True, requires=[
-                IS_NOT_EMPTY(error_message="Email is required"),
-                IS_EMAIL(error_message="Invalid email format"),
-            ]),
-            Field("password_hash", "string", length=255, requires=IS_NOT_EMPTY()),
-            Field("full_name", "string", length=255),
-            Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
-                VALID_ROLES,
-                error_message=f"Role must be one of: {', '.join(VALID_ROLES)}"
-            )),
-            Field("is_active", "boolean", default=True),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        )
+    # Always run migrations, PyDAL handles existing tables gracefully
+    # Use fake_migrate_all=True to sync with existing schema created via SQL migrations
+    # This prevents PyDAL from trying to recreate tables that already exist
+    db = DAL(
+        db_uri,
+        pool_size=Config.DB_POOL_SIZE,
+        migrate=True,
+        fake_migrate_all=True,
+        check_reserved=["all"],
+        lazy_tables=False,
+        folder=migration_folder,
+    )
 
-        # Define refresh tokens table for token invalidation
-        db.define_table(
-            "refresh_tokens",
-            Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
-            Field("token_hash", "string", length=255, unique=True),
-            Field("expires_at", "datetime"),
-            Field("revoked", "boolean", default=False),
-            Field("created_at", "datetime", default=datetime.utcnow),
-        )
+    # Define tenants table FIRST - Required before users due to default_tenant_id reference
+    db.define_table(
+        "tenants",
+        Field("name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
+        Field("slug", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
+        Field("description", "text"),
+        Field("is_active", "boolean", default=True),
+        Field("max_users", "integer", default=0),  # 0 = unlimited
+        Field("max_repositories", "integer", default=0),  # 0 = unlimited
+        Field("max_teams", "integer", default=0),  # 0 = unlimited
+        Field("settings", "json", default={}),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(name)s",
+    )
 
-        # Define reviews table - Main review requests
-        db.define_table(
-            "reviews",
-            Field("external_id", "string", length=64, unique=True),
-            Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
-            Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
-            Field("pull_request_id", "integer"),
-            Field("pull_request_url", "string", length=512),
-            Field("base_sha", "string", length=64),
-            Field("head_sha", "string", length=64),
-            Field("review_type", "string", requires=IS_IN_SET(["differential", "whole"])),
-            Field("categories", "json"),
-            Field("ai_provider", "string", length=64),
-            Field("status", "string", default="queued", requires=IS_IN_SET(
-                ["queued", "in_progress", "completed", "failed", "cancelled"]
-            )),
-            Field("error_message", "text"),
-            Field("files_reviewed", "integer", default=0),
-            Field("comments_posted", "integer", default=0),
-            Field("started_at", "datetime"),
-            Field("completed_at", "datetime"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        )
+    # Define users table
+    db.define_table(
+        "users",
+        Field("email", "string", length=255, unique=True, requires=[
+            IS_NOT_EMPTY(error_message="Email is required"),
+            IS_EMAIL(error_message="Invalid email format"),
+        ]),
+        Field("password_hash", "string", length=255, requires=IS_NOT_EMPTY()),
+        Field("full_name", "string", length=255),
+        Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
+            VALID_ROLES,
+            error_message=f"Role must be one of: {', '.join(VALID_ROLES)}"
+        )),
+        Field("global_role", "string", length=50, default="viewer", requires=IS_IN_SET(
+            VALID_ROLES,
+            error_message=f"Global role must be one of: {', '.join(VALID_ROLES)}"
+        )),
+        Field("default_tenant_id", "reference tenants", ondelete="SET NULL"),
+        Field("is_active", "boolean", default=True),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
 
-        # Define review_comments table - Individual review comments
-        db.define_table(
-            "review_comments",
-            Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-            Field("file_path", "string", length=512),
-            Field("line_start", "integer"),
-            Field("line_end", "integer"),
-            Field("category", "string", requires=IS_IN_SET(
-                ["security", "best_practices", "framework", "iac"]
-            )),
-            Field("severity", "string", requires=IS_IN_SET(
-                ["critical", "major", "minor", "suggestion"]
-            )),
-            Field("title", "string", length=255),
-            Field("body", "text"),
-            Field("suggestion", "text"),
-            Field("review_source", "string", length=64),
-            Field("linter_rule_id", "string", length=128),
-            Field("platform_comment_id", "string", length=128),
-            Field("status", "string", default="open", requires=IS_IN_SET(
-                ["open", "acknowledged", "fixed", "wont_fix", "false_positive"]
-            )),
-            Field("posted_at", "datetime"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-        )
+    # Define refresh tokens table for token invalidation
+    db.define_table(
+        "refresh_tokens",
+        Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
+        Field("token_hash", "string", length=255, unique=True),
+        Field("expires_at", "datetime"),
+        Field("revoked", "boolean", default=False),
+        Field("created_at", "datetime", default=datetime.utcnow),
+    )
 
-        # Define review_detections table - Detected languages/frameworks per review
-        db.define_table(
-            "review_detections",
-            Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-            Field("detection_type", "string"),
-            Field("name", "string", length=128),
-            Field("confidence", "double"),
-            Field("file_count", "integer"),
-        )
+    # Define teams table - Department/Project groups within tenants
+    # IMPORTANT: Must be defined before reviews and repo_configs which reference it
+    db.define_table(
+        "teams",
+        Field("tenant_id", "reference tenants", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
+        Field("name", "string", length=255, requires=IS_NOT_EMPTY()),
+        Field("slug", "string", length=128, requires=IS_NOT_EMPTY()),
+        Field("description", "text"),
+        Field("is_active", "boolean", default=True),
+        Field("is_default", "boolean", default=False),  # Default team for tenant
+        Field("settings", "json", default={}),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(name)s",
+    )
 
-        # Define git_credentials table - Secure credential storage
-        # IMPORTANT: Must be defined before repo_configs which references it
-        db.define_table(
-            "git_credentials",
-            Field("name", "string", length=128),
-            Field("git_url_pattern", "string", length=255),
-            Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
-            Field("encrypted_credential", "blob"),
-            Field("ssh_key_passphrase", "blob"),
-            Field("created_by", "reference users"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        )
+    # Define custom_roles table - User-defined roles with scopes
+    # IMPORTANT: Must be defined before repository_members, tenant_members, team_members which reference it
+    db.define_table(
+        "custom_roles",
+        Field("tenant_id", "reference tenants", ondelete="CASCADE"),  # NULL = global role
+        Field("team_id", "reference teams", ondelete="CASCADE"),  # NULL = not team-specific
+        Field("name", "string", length=128, requires=IS_NOT_EMPTY()),
+        Field("slug", "string", length=128, requires=IS_NOT_EMPTY()),
+        Field("description", "text"),
+        Field("role_level", "string", requires=IS_IN_SET(["global", "tenant", "team", "resource"])),
+        Field("scopes", "json", requires=IS_NOT_EMPTY()),
+        Field("is_active", "boolean", default=True),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(name)s",
+    )
 
-        # Define repo_configs table - Per-repository configuration
-        db.define_table(
-            "repo_configs",
-            Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
-            Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
-            Field("enabled", "boolean", default=True),
-            Field("auto_review", "boolean", default=True),
-            Field("review_on_open", "boolean", default=True),
-            Field("review_on_sync", "boolean", default=False),
-            Field("default_categories", "json"),
-            Field("default_ai_provider", "string", length=64),
-            Field("ignored_paths", "json"),
-            Field("custom_rules", "json"),
-            Field("webhook_secret", "string", length=255),
-            # Polling configuration
-            Field("polling_enabled", "boolean", default=False),
-            Field("polling_interval_minutes", "integer", default=5),
-            Field("last_poll_at", "datetime"),
-            # Organization grouping (for dashboard drill-down)
-            Field("platform_organization", "string", length=255),
-            # Display settings
-            Field("display_name", "string", length=255),
-            Field("description", "text"),
-            Field("is_active", "boolean", default=True),
-            # Credential selection
-            Field("credential_id", "reference git_credentials", ondelete="SET NULL"),
-            # Advanced settings
-            Field("max_review_age_hours", "integer", default=168),  # 7 days
-            Field("skip_patterns", "json"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            format="%(platform)s/%(repository)s",
-        )
+    # Define reviews table - Main review requests
+    db.define_table(
+        "reviews",
+        # Multi-tenancy fields
+        Field("tenant_id", "reference tenants"),
+        Field("team_id", "reference teams"),
+        Field("triggered_by", "reference users"),
+        # Review identification
+        Field("external_id", "string", length=64, unique=True),
+        Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
+        Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
+        Field("pull_request_id", "integer"),
+        Field("pull_request_url", "string", length=512),
+        Field("base_sha", "string", length=64),
+        Field("head_sha", "string", length=64),
+        Field("review_type", "string", requires=IS_IN_SET(["differential", "whole"])),
+        Field("categories", "json"),
+        Field("ai_provider", "string", length=64),
+        Field("status", "string", default="queued", requires=IS_IN_SET(
+            ["queued", "in_progress", "completed", "failed", "cancelled"]
+        )),
+        Field("error_message", "text"),
+        Field("files_reviewed", "integer", default=0),
+        Field("comments_posted", "integer", default=0),
+        Field("started_at", "datetime"),
+        Field("completed_at", "datetime"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
 
-        # Define repository_members table - Per-user repository access and credentials
-        db.define_table(
-            "repository_members",
-            Field("repository_id", "reference repo_configs", ondelete="CASCADE"),
-            Field("user_id", "reference users", ondelete="CASCADE"),
-            Field("role", "string", requires=IS_IN_SET(["viewer", "contributor", "admin"])),
-            Field("personal_token_id", "reference git_credentials", ondelete="SET NULL"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        )
+    # Define review_comments table - Individual review comments
+    db.define_table(
+        "review_comments",
+        Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+        Field("file_path", "string", length=512),
+        Field("line_start", "integer"),
+        Field("line_end", "integer"),
+        Field("category", "string", requires=IS_IN_SET(
+            ["security", "best_practices", "framework", "iac"]
+        )),
+        Field("severity", "string", requires=IS_IN_SET(
+            ["critical", "major", "minor", "suggestion"]
+        )),
+        Field("title", "string", length=255),
+        Field("body", "text"),
+        Field("suggestion", "text"),
+        Field("review_source", "string", length=64),
+        Field("linter_rule_id", "string", length=128),
+        Field("platform_comment_id", "string", length=128),
+        Field("status", "string", default="open", requires=IS_IN_SET(
+            ["open", "acknowledged", "fixed", "wont_fix", "false_positive"]
+        )),
+        Field("posted_at", "datetime"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+    )
 
-        # Define provider_usage table - AI token usage tracking
-        db.define_table(
-            "provider_usage",
-            Field("review_id", "reference reviews"),
-            Field("provider", "string", length=64),
-            Field("model", "string", length=128),
-            Field("prompt_tokens", "integer"),
-            Field("completion_tokens", "integer"),
-            Field("total_tokens", "integer"),
-            Field("latency_ms", "integer"),
-            Field("cost_estimate", "double"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-        )
+    # Define review_detections table - Detected languages/frameworks per review
+    db.define_table(
+        "review_detections",
+        Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+        Field("detection_type", "string"),
+        Field("name", "string", length=128),
+        Field("confidence", "double"),
+        Field("file_count", "integer"),
+    )
 
-        # Define ai_model_config table - AI model preferences per category
-        db.define_table(
-            "ai_model_config",
-            Field("config_name", "string", length=128, unique=True, default="default"),
-            Field("security_enabled", "boolean", default=True),
-            Field("security_model", "string", length=128, default="granite-code:34b"),
-            Field("best_practices_enabled", "boolean", default=True),
-            Field("best_practices_model", "string", length=128, default="llama3.3:70b"),
-            Field("framework_enabled", "boolean", default=True),
-            Field("framework_model", "string", length=128, default="codestral:22b"),
-            Field("iac_enabled", "boolean", default=True),
-            Field("iac_model", "string", length=128, default="granite-code:20b"),
-            Field("fallback_model", "string", length=128, default="starcoder2:15b"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            format="%(config_name)s",
-        )
+    # Define git_credentials table - Secure credential storage
+    # IMPORTANT: Must be defined before repo_configs which references it
+    db.define_table(
+        "git_credentials",
+        Field("name", "string", length=128),
+        Field("git_url_pattern", "string", length=255),
+        Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
+        Field("encrypted_credential", "blob"),
+        Field("ssh_key_passphrase", "blob"),
+        Field("created_by", "reference users"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
 
-        # Define license_policies table - License policy configuration
-        db.define_table(
-            "license_policies",
-            Field("license_name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
-            Field("policy", "string", default="allowed", requires=IS_IN_SET(
-                ["allowed", "blocked", "review_required"]
-            )),
-            Field("actions", "json", default=["warn"]),
-            Field("description", "text"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            format="%(license_name)s",
-        )
+    # Define repo_configs table - Per-repository configuration
+    db.define_table(
+        "repo_configs",
+        # Multi-tenancy fields
+        Field("tenant_id", "reference tenants", ondelete="CASCADE"),
+        Field("team_id", "reference teams", ondelete="CASCADE"),
+        Field("owner_id", "reference users", ondelete="SET NULL"),
+        # Repository identification
+        Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
+        Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
+        Field("enabled", "boolean", default=True),
+        Field("auto_review", "boolean", default=True),
+        Field("review_on_open", "boolean", default=True),
+        Field("review_on_sync", "boolean", default=False),
+        Field("default_categories", "json"),
+        Field("default_ai_provider", "string", length=64),
+        Field("ignored_paths", "json"),
+        Field("custom_rules", "json"),
+        Field("webhook_secret", "string", length=255),
+        # Polling configuration
+        Field("polling_enabled", "boolean", default=False),
+        Field("polling_interval_minutes", "integer", default=5),
+        Field("last_poll_at", "datetime"),
+        # Organization grouping (for dashboard drill-down)
+        Field("platform_organization", "string", length=255),
+        # Display settings
+        Field("display_name", "string", length=255),
+        Field("description", "text"),
+        Field("is_active", "boolean", default=True),
+        # Credential selection
+        Field("credential_id", "reference git_credentials", ondelete="SET NULL"),
+        # Advanced settings
+        Field("max_review_age_hours", "integer", default=168),  # 7 days
+        Field("skip_patterns", "json"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(platform)s/%(repository)s",
+    )
 
-        # Define license_detections table - Detected licenses per review
-        db.define_table(
-            "license_detections",
-            Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-            Field("package_name", "string", length=255),
-            Field("package_version", "string", length=128),
-            Field("license_name", "string", length=255),
-            Field("license_source", "string", length=64),
-            Field("file_path", "string", length=512),
-            Field("confidence", "double"),
-            Field("policy_violation", "boolean", default=False),
-            Field("created_at", "datetime", default=datetime.utcnow),
-        )
+    # Define repository_members table - Per-user repository access and credentials
+    db.define_table(
+        "repository_members",
+        Field("repository_id", "reference repo_configs", ondelete="CASCADE"),
+        Field("user_id", "reference users", ondelete="CASCADE"),
+        Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
+            ["owner", "maintainer", "viewer", "custom"]
+        )),
+        Field("custom_role_id", "reference custom_roles", ondelete="SET NULL"),
+        Field("scopes", "json", default=[]),
+        Field("personal_token_id", "reference git_credentials", ondelete="SET NULL"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
 
-        # Define license_violations table - License policy violations
-        db.define_table(
-            "license_violations",
-            Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-            Field("detection_id", "reference license_detections"),
-            Field("license_name", "string", length=255),
-            Field("package_name", "string", length=255),
-            Field("policy", "string"),
-            Field("severity", "string", default="warning", requires=IS_IN_SET(
-                ["critical", "warning", "info"]
-            )),
-            Field("actions_taken", "json"),
-            Field("status", "string", default="open", requires=IS_IN_SET(
-                ["open", "acknowledged", "resolved", "suppressed"]
-            )),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        )
+    # Define provider_usage table - AI token usage tracking
+    db.define_table(
+        "provider_usage",
+        Field("review_id", "reference reviews"),
+        Field("provider", "string", length=64),
+        Field("model", "string", length=128),
+        Field("prompt_tokens", "integer"),
+        Field("completion_tokens", "integer"),
+        Field("total_tokens", "integer"),
+        Field("latency_ms", "integer"),
+        Field("cost_estimate", "double"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+    )
 
-        # Define installation_config table - Installation-level configuration
-        db.define_table(
-            "installation_config",
-            Field("config_key", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
-            Field("config_value", "text"),
-            Field("created_at", "datetime", default=datetime.utcnow),
-            Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            format="%(config_key)s",
-        )
+    # Define ai_model_config table - AI model preferences per category
+    db.define_table(
+        "ai_model_config",
+        Field("config_name", "string", length=128, unique=True, default="default"),
+        Field("security_enabled", "boolean", default=True),
+        Field("security_model", "string", length=128, default="granite-code:20b"),
+        Field("best_practices_enabled", "boolean", default=True),
+        Field("best_practices_model", "string", length=128, default="codestral:22b"),
+        Field("framework_enabled", "boolean", default=True),
+        Field("framework_model", "string", length=128, default="codestral:22b"),
+        Field("iac_enabled", "boolean", default=True),
+        Field("iac_model", "string", length=128, default="granite-code:20b"),
+        Field("fallback_model", "string", length=128, default="starcoder2:15b"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(config_name)s",
+    )
 
-        # Commit table definitions
-        db.commit()
+    # Define license_policies table - License policy configuration
+    db.define_table(
+        "license_policies",
+        Field("license_name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
+        Field("policy", "string", default="allowed", requires=IS_IN_SET(
+            ["allowed", "blocked", "review_required"]
+        )),
+        Field("actions", "json", default=["warn"]),
+        Field("description", "text"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(license_name)s",
+    )
 
-    except Exception as e:
-        # If migration fails (likely due to existing tables), reconnect with fake_migrate
-        error_msg = str(e).lower()
-        if "already exists" in error_msg or "duplicate" in error_msg:
-            print(f"Tables already exist, syncing schema with fake_migrate_all=True")
+    # Define license_detections table - Detected licenses per review
+    db.define_table(
+        "license_detections",
+        Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+        Field("package_name", "string", length=255),
+        Field("package_version", "string", length=128),
+        Field("license_name", "string", length=255),
+        Field("license_source", "string", length=64),
+        Field("file_path", "string", length=512),
+        Field("confidence", "double"),
+        Field("policy_violation", "boolean", default=False),
+        Field("created_at", "datetime", default=datetime.utcnow),
+    )
 
-            # Reconnect with fake migration to sync existing schema
-            db = DAL(
-                db_uri,
-                pool_size=Config.DB_POOL_SIZE,
-                migrate=False,
-                fake_migrate_all=True,
-                check_reserved=["all"],
-                lazy_tables=False,
-            )
+    # Define license_violations table - License policy violations
+    db.define_table(
+        "license_violations",
+        Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
+        Field("detection_id", "reference license_detections"),
+        Field("license_name", "string", length=255),
+        Field("package_name", "string", length=255),
+        Field("policy", "string"),
+        Field("severity", "string", default="warning", requires=IS_IN_SET(
+            ["critical", "warning", "info"]
+        )),
+        Field("actions_taken", "json"),
+        Field("status", "string", default="open", requires=IS_IN_SET(
+            ["open", "acknowledged", "resolved", "suppressed"]
+        )),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
 
-            # Define tables again (without creating them, just syncing schema)
-            db.define_table(
-                "users",
-                Field("email", "string", length=255, unique=True, requires=[
-                    IS_NOT_EMPTY(error_message="Email is required"),
-                    IS_EMAIL(error_message="Invalid email format"),
-                ]),
-                Field("password_hash", "string", length=255, requires=IS_NOT_EMPTY()),
-                Field("full_name", "string", length=255),
-                Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
-                    VALID_ROLES,
-                    error_message=f"Role must be one of: {', '.join(VALID_ROLES)}"
-                )),
-                Field("is_active", "boolean", default=True),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            )
+    # Define installation_config table - Installation-level configuration
+    db.define_table(
+        "installation_config",
+        Field("config_key", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
+        Field("config_value", "text"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(config_key)s",
+    )
 
-            db.define_table(
-                "refresh_tokens",
-                Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
-                Field("token_hash", "string", length=255, unique=True),
-                Field("expires_at", "datetime"),
-                Field("revoked", "boolean", default=False),
-                Field("created_at", "datetime", default=datetime.utcnow),
-            )
+    # Define tenant_members table - User-tenant associations with roles
+    db.define_table(
+        "tenant_members",
+        Field("tenant_id", "reference tenants", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
+        Field("user_id", "reference users", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
+        Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
+            ["admin", "maintainer", "viewer", "custom"]
+        )),
+        Field("custom_role_id", "reference custom_roles", ondelete="SET NULL"),
+        Field("scopes", "json", default=[]),
+        Field("is_active", "boolean", default=True),
+        Field("joined_at", "datetime", default=datetime.utcnow),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
 
-            db.define_table(
-                "reviews",
-                Field("external_id", "string", length=64, unique=True),
-                Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
-                Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
-                Field("pull_request_id", "integer"),
-                Field("pull_request_url", "string", length=512),
-                Field("base_sha", "string", length=64),
-                Field("head_sha", "string", length=64),
-                Field("review_type", "string", requires=IS_IN_SET(["differential", "whole"])),
-                Field("categories", "json"),
-                Field("ai_provider", "string", length=64),
-                Field("status", "string", default="queued", requires=IS_IN_SET(
-                    ["queued", "in_progress", "completed", "failed", "cancelled"]
-                )),
-                Field("error_message", "text"),
-                Field("files_reviewed", "integer", default=0),
-                Field("comments_posted", "integer", default=0),
-                Field("started_at", "datetime"),
-                Field("completed_at", "datetime"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            )
+    # Define team_members table - User-team associations with roles
+    db.define_table(
+        "team_members",
+        Field("team_id", "reference teams", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
+        Field("user_id", "reference users", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
+        Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
+            ["admin", "maintainer", "viewer", "custom"]
+        )),
+        Field("custom_role_id", "reference custom_roles", ondelete="SET NULL"),
+        Field("scopes", "json", default=[]),
+        Field("is_active", "boolean", default=True),
+        Field("joined_at", "datetime", default=datetime.utcnow),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
 
-            db.define_table(
-                "review_comments",
-                Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-                Field("file_path", "string", length=512),
-                Field("line_start", "integer"),
-                Field("line_end", "integer"),
-                Field("category", "string", requires=IS_IN_SET(
-                    ["security", "best_practices", "framework", "iac"]
-                )),
-                Field("severity", "string", requires=IS_IN_SET(
-                    ["critical", "major", "minor", "suggestion"]
-                )),
-                Field("title", "string", length=255),
-                Field("body", "text"),
-                Field("suggestion", "text"),
-                Field("review_source", "string", length=64),
-                Field("linter_rule_id", "string", length=128),
-                Field("platform_comment_id", "string", length=128),
-                Field("status", "string", default="open", requires=IS_IN_SET(
-                    ["open", "acknowledged", "fixed", "wont_fix", "false_positive"]
-                )),
-                Field("posted_at", "datetime"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-            )
+    # Define scopes table - Available permission scopes
+    db.define_table(
+        "scopes",
+        Field("permission_scope", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
+        Field("description", "text"),
+        Field("category", "string", length=64),
+        Field("scope_level", "string", requires=IS_IN_SET(["global", "tenant", "team", "resource"])),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        format="%(permission_scope)s",
+    )
 
-            db.define_table(
-                "review_detections",
-                Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-                Field("detection_type", "string"),
-                Field("name", "string", length=128),
-                Field("confidence", "double"),
-                Field("file_count", "integer"),
-            )
-
-            db.define_table(
-                "repo_configs",
-                Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
-                Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
-                Field("enabled", "boolean", default=True),
-                Field("auto_review", "boolean", default=True),
-                Field("review_on_open", "boolean", default=True),
-                Field("review_on_sync", "boolean", default=False),
-                Field("default_categories", "json"),
-                Field("default_ai_provider", "string", length=64),
-                Field("ignored_paths", "json"),
-                Field("custom_rules", "json"),
-                Field("webhook_secret", "string", length=255),
-                # Polling configuration
-                Field("polling_enabled", "boolean", default=False),
-                Field("polling_interval_minutes", "integer", default=5),
-                Field("last_poll_at", "datetime"),
-                # Organization grouping (for dashboard drill-down)
-                Field("platform_organization", "string", length=255),
-                # Display settings
-                Field("display_name", "string", length=255),
-                Field("description", "text"),
-                Field("is_active", "boolean", default=True),
-                # Credential selection
-                Field("credential_id", "reference git_credentials", ondelete="SET NULL"),
-                # Advanced settings
-                Field("max_review_age_hours", "integer", default=168),  # 7 days
-                Field("skip_patterns", "json"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-                format="%(platform)s/%(repository)s",
-            )
-
-            db.define_table(
-                "repository_members",
-                Field("repository_id", "reference repo_configs", ondelete="CASCADE"),
-                Field("user_id", "reference users", ondelete="CASCADE"),
-                Field("role", "string", requires=IS_IN_SET(["viewer", "contributor", "admin"])),
-                Field("personal_token_id", "reference git_credentials", ondelete="SET NULL"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            )
-
-            db.define_table(
-                "provider_usage",
-                Field("review_id", "reference reviews"),
-                Field("provider", "string", length=64),
-                Field("model", "string", length=128),
-                Field("prompt_tokens", "integer"),
-                Field("completion_tokens", "integer"),
-                Field("total_tokens", "integer"),
-                Field("latency_ms", "integer"),
-                Field("cost_estimate", "double"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-            )
-
-            db.define_table(
-                "git_credentials",
-                Field("name", "string", length=128),
-                Field("git_url_pattern", "string", length=255),
-                Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
-                Field("encrypted_credential", "blob"),
-                Field("ssh_key_passphrase", "blob"),
-                Field("created_by", "reference users"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            )
-
-            db.define_table(
-                "ai_model_config",
-                Field("config_name", "string", length=128, unique=True, default="default"),
-                Field("security_enabled", "boolean", default=True),
-                Field("security_model", "string", length=128, default="granite-code:34b"),
-                Field("best_practices_enabled", "boolean", default=True),
-                Field("best_practices_model", "string", length=128, default="llama3.3:70b"),
-                Field("framework_enabled", "boolean", default=True),
-                Field("framework_model", "string", length=128, default="codestral:22b"),
-                Field("iac_enabled", "boolean", default=True),
-                Field("iac_model", "string", length=128, default="granite-code:20b"),
-                Field("fallback_model", "string", length=128, default="starcoder2:15b"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-                format="%(config_name)s",
-            )
-
-            db.define_table(
-                "license_policies",
-                Field("license_name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
-                Field("policy", "string", default="allowed", requires=IS_IN_SET(
-                    ["allowed", "blocked", "review_required"]
-                )),
-                Field("actions", "json", default=["warn"]),
-                Field("description", "text"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-                format="%(license_name)s",
-            )
-
-            db.define_table(
-                "license_detections",
-                Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-                Field("package_name", "string", length=255),
-                Field("package_version", "string", length=128),
-                Field("license_name", "string", length=255),
-                Field("license_source", "string", length=64),
-                Field("file_path", "string", length=512),
-                Field("confidence", "double"),
-                Field("policy_violation", "boolean", default=False),
-                Field("created_at", "datetime", default=datetime.utcnow),
-            )
-
-            db.define_table(
-                "license_violations",
-                Field("review_id", "reference reviews", requires=IS_NOT_EMPTY()),
-                Field("detection_id", "reference license_detections"),
-                Field("license_name", "string", length=255),
-                Field("package_name", "string", length=255),
-                Field("policy", "string"),
-                Field("severity", "string", default="warning", requires=IS_IN_SET(
-                    ["critical", "warning", "info"]
-                )),
-                Field("actions_taken", "json"),
-                Field("status", "string", default="open", requires=IS_IN_SET(
-                    ["open", "acknowledged", "resolved", "suppressed"]
-                )),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-            )
-
-            db.define_table(
-                "installation_config",
-                Field("config_key", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
-                Field("config_value", "text"),
-                Field("created_at", "datetime", default=datetime.utcnow),
-                Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-                format="%(config_key)s",
-            )
-
-            db.commit()
-        else:
-            # Re-raise if it's a different kind of error
-            raise
+    # Commit table definitions
+    db.commit()
 
     # Store db instance in app
     app.config["db"] = db
@@ -1421,4 +1298,245 @@ def initialize_ai_config() -> None:
                   f"AI configuration can be set later via API.")
         else:
             # Re-raise other types of database errors
+            raise
+
+
+def initialize_admin_user() -> None:
+    """Initialize default admin user in default tenant if none exists.
+
+    Creates admin user with:
+    - email: admin@localhost.local
+    - password: admin123 (bcrypt hashed)
+    - role: admin
+    - global_role: admin
+    - default_tenant_id: 1 (default tenant)
+
+    Adds admin to default tenant (id=1) as admin role
+    Adds admin to default team (id=1) as admin role
+
+    Only creates if admin doesn't already exist (checked by email).
+    """
+    from .auth import hash_password
+
+    db = get_db()
+
+    try:
+        admin_email = "admin@localhost.local"
+
+        # Check if admin already exists by email
+        existing_admin = db(db.users.email == admin_email).select().first()
+        if existing_admin:
+            print(f"Admin user already exists: {admin_email} (ID: {existing_admin.id})")
+            return
+
+        print(f"No admin user found, creating default admin user: {admin_email}")
+
+        # Ensure default tenant exists
+        default_tenant = db(db.tenants.slug == "default").select().first()
+        if not default_tenant:
+            print("Creating default tenant...")
+            tenant_id = db.tenants.insert(
+                name="Default",
+                slug="default",
+                description="Default tenant for all users",
+                is_active=True,
+                max_users=0,
+                max_repositories=0,
+                max_teams=0,
+                settings={},
+            )
+            db.commit()
+            print(f"Default tenant created with ID: {tenant_id}")
+
+            # Create default team for this tenant
+            print("Creating default team...")
+            team_id = db.teams.insert(
+                tenant_id=tenant_id,
+                name="Default",
+                slug="default",
+                description="Default team for all tenant members",
+                is_active=True,
+                is_default=True,
+                settings={},
+            )
+            db.commit()
+            print(f"Default team created with ID: {team_id}")
+        else:
+            tenant_id = default_tenant.id
+            print(f"Using existing default tenant (ID: {tenant_id})")
+
+            # Check if default team exists
+            default_team = db(
+                (db.teams.tenant_id == tenant_id) & (db.teams.is_default == True)
+            ).select().first()
+            if not default_team:
+                print("Creating default team...")
+                team_id = db.teams.insert(
+                    tenant_id=tenant_id,
+                    name="Default",
+                    slug="default",
+                    description="Default team for all tenant members",
+                    is_active=True,
+                    is_default=True,
+                    settings={},
+                )
+                db.commit()
+                print(f"Default team created with ID: {team_id}")
+            else:
+                team_id = default_team.id
+                print(f"Using existing default team (ID: {team_id})")
+
+        # Create admin user
+        print(f"Creating admin user: {admin_email}")
+        user_id = db.users.insert(
+            email=admin_email,
+            password_hash=hash_password("admin123"),
+            full_name="Administrator",
+            role="admin",
+            global_role="admin",
+            default_tenant_id=tenant_id,
+            is_active=True,
+        )
+        db.commit()
+        print(f"Admin user created with ID: {user_id}")
+
+        # Add admin to default tenant
+        print(f"Adding admin to default tenant (ID: {tenant_id})...")
+        tenant_member_id = db.tenant_members.insert(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            role="admin",
+            is_active=True,
+        )
+        db.commit()
+        print(f"Admin added to tenant with membership ID: {tenant_member_id}")
+
+        # Add admin to default team
+        print(f"Adding admin to default team (ID: {team_id})...")
+        team_member_id = db.team_members.insert(
+            team_id=team_id,
+            user_id=user_id,
+            role="admin",
+            is_active=True,
+        )
+        db.commit()
+        print(f"Admin added to team with membership ID: {team_member_id}")
+
+        print(f"Default admin user initialized: {admin_email} / admin123")
+        print("IMPORTANT: Change the default password immediately after first login!")
+
+    except Exception as e:
+        # Rollback the transaction to clear error state
+        db.rollback()
+        # Table doesn't exist yet - this is normal on first startup
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str or "failed sql transaction" in error_str:
+            print(f"Required tables not yet created, skipping admin user initialization. "
+                  f"Admin user will be created on next restart.")
+        else:
+            # Re-raise other types of database errors
+            raise
+
+
+def initialize_default_tenant() -> None:
+    """Create default tenant and team, migrate existing data."""
+    from .auth import hash_password
+
+    db = get_db()
+
+    try:
+        # Check if default tenant exists
+        default_tenant = db(db.tenants.slug == "default").select().first()
+
+        if not default_tenant:
+            print("Creating default tenant...")
+            tenant_id = db.tenants.insert(
+                name="Default",
+                slug="default",
+                description="Default tenant for all users",
+                is_active=True,
+                max_users=0,  # Unlimited
+                max_repositories=0,  # Unlimited
+                max_teams=0,  # Unlimited
+                settings={},
+            )
+            db.commit()
+            print(f"Default tenant created with ID: {tenant_id}")
+
+            # Create default team for this tenant
+            team_id = db.teams.insert(
+                tenant_id=tenant_id,
+                name="Default",
+                slug="default",
+                description="Default team for all tenant members",
+                is_active=True,
+                is_default=True,
+                settings={},
+            )
+            db.commit()
+            print(f"Default team created with ID: {team_id}")
+
+            # Migrate all existing users to default tenant/team
+            users = db(db.users.id > 0).select()
+            for user in users:
+                # Determine role based on existing user role
+                tenant_role = "admin" if user.role == "admin" else "viewer"
+                team_role = "admin" if user.role == "admin" else "viewer"
+
+                # Add user to default tenant
+                db.tenant_members.insert(
+                    tenant_id=tenant_id,
+                    user_id=user.id,
+                    role=tenant_role,
+                    is_active=True,
+                )
+
+                # Add user to default team
+                db.team_members.insert(
+                    team_id=team_id,
+                    user_id=user.id,
+                    role=team_role,
+                    is_active=True,
+                )
+
+                # Set default tenant for user
+                db(db.users.id == user.id).update(
+                    default_tenant_id=tenant_id,
+                    global_role=user.role,  # Copy role to global_role
+                )
+
+            db.commit()
+            print(f"Migrated {len(users)} existing users to default tenant/team")
+
+            # Migrate all existing repositories to default team
+            repos = db(db.repo_configs.id > 0).select()
+            for repo in repos:
+                db(db.repo_configs.id == repo.id).update(
+                    tenant_id=tenant_id,
+                    team_id=team_id,
+                )
+            db.commit()
+            print(f"Migrated {len(repos)} existing repositories to default team")
+
+            # Migrate all existing reviews to default tenant/team
+            reviews = db(db.reviews.id > 0).select()
+            for review in reviews:
+                db(db.reviews.id == review.id).update(
+                    tenant_id=tenant_id,
+                    team_id=team_id,
+                )
+            db.commit()
+            print(f"Migrated {len(reviews)} existing reviews to default tenant/team")
+
+            print("Default tenant migration completed successfully")
+        else:
+            print(f"Default tenant already exists (ID: {default_tenant.id})")
+
+    except Exception as e:
+        db.rollback()
+        error_str = str(e).lower()
+        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
+            print("Multi-tenancy tables not yet created, skipping default tenant initialization.")
+        else:
+            print(f"Error initializing default tenant: {e}")
             raise

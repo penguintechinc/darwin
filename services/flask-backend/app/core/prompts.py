@@ -54,9 +54,11 @@ Provide your review as a JSON array of findings:
     "severity": "critical|major|minor|suggestion",
     "title": "Brief title of the issue",
     "body": "Detailed explanation of the security vulnerability",
-    "suggestion": "Concrete code suggestion to fix the issue (optional)"
+    "suggestion": "Fixed code only - no explanations, just the corrected code that should replace the problematic lines (optional)"
   }}
 ]
+
+**IMPORTANT for suggestions:** Only include the exact replacement code with no additional text, comments explaining the change, or markdown formatting. The suggestion will be displayed as an apply-able code change.
 
 Only include actual security issues. Return empty array [] if no issues found.""",
     )
@@ -100,9 +102,11 @@ Provide your review as a JSON array of findings:
     "severity": "critical|major|minor|suggestion",
     "title": "Brief title of the issue",
     "body": "Detailed explanation of the best practice violation",
-    "suggestion": "Concrete code suggestion to improve (optional)"
+    "suggestion": "Fixed code only - no explanations, just the corrected code that should replace the problematic lines (optional)"
   }}
 ]
+
+**IMPORTANT for suggestions:** Only include the exact replacement code with no additional text, comments explaining the change, or markdown formatting. The suggestion will be displayed as an apply-able code change.
 
 Only include meaningful improvements. Return empty array [] if no issues found.""",
     )
@@ -146,9 +150,11 @@ Provide your review as a JSON array of findings:
     "severity": "critical|major|minor|suggestion",
     "title": "Brief title of the issue",
     "body": "Detailed explanation of the framework issue",
-    "suggestion": "Concrete code suggestion following framework conventions (optional)"
+    "suggestion": "Fixed code only - no explanations, just the corrected code that should replace the problematic lines (optional)"
   }}
 ]
+
+**IMPORTANT for suggestions:** Only include the exact replacement code with no additional text, comments explaining the change, or markdown formatting. The suggestion will be displayed as an apply-able code change.
 
 Focus on {framework}-specific issues. Return empty array [] if no issues found.""",
     )
@@ -191,9 +197,11 @@ Provide your review as a JSON array of findings:
     "severity": "critical|major|minor|suggestion",
     "title": "Brief title of the issue",
     "body": "Detailed explanation of the infrastructure issue",
-    "suggestion": "Concrete configuration suggestion (optional)"
+    "suggestion": "Fixed code only - no explanations, just the corrected configuration that should replace the problematic lines (optional)"
   }}
 ]
+
+**IMPORTANT for suggestions:** Only include the exact replacement code with no additional text, comments explaining the change, or markdown formatting. The suggestion will be displayed as an apply-able code change.
 
 Focus on infrastructure security and best practices. Return empty array [] if no issues found.""",
     )

@@ -38,7 +38,7 @@ def get_current_user() -> Optional[dict]:
 
 
 def auth_required(f: Callable) -> Callable:
-    """Decorator to require authentication."""
+    """Decorator to require authentication and extract tenant/team context from JWT and database."""
     @wraps(f)
     def decorated(*args, **kwargs):
         token = get_token_from_header()
@@ -68,6 +68,37 @@ def auth_required(f: Callable) -> Callable:
 
         # Store user in request context
         g.current_user = user
+
+        # Extract and store tenant/team context from JWT token
+        g.user_tenant_id = payload.get("default_tenant_id")
+        g.user_global_role = payload.get("global_role", "viewer")
+
+        # Get up-to-date tenant and team memberships from database
+        # This ensures we have current memberships even if JWT is cached
+        from .models import get_db
+        db = get_db()
+
+        # Fetch current tenant memberships
+        tenant_members = db(db.tenant_members.user_id == int(user_id)).select()
+        tenant_memberships = []
+        for tm in tenant_members:
+            if tm.is_active:
+                tenant_memberships.append({
+                    "tenant_id": tm.tenant_id,
+                    "role": tm.role,
+                })
+        g.user_tenant_memberships = tenant_memberships
+
+        # Fetch current team memberships
+        team_members = db(db.team_members.user_id == int(user_id)).select()
+        team_memberships = []
+        for tm in team_members:
+            if tm.is_active:
+                team_memberships.append({
+                    "team_id": tm.team_id,
+                    "role": tm.role,
+                })
+        g.user_team_memberships = team_memberships
 
         return f(*args, **kwargs)
 

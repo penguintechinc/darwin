@@ -8,6 +8,9 @@ from .issues import issues_bp
 from .providers import providers_bp
 from .repos import repos_bp
 from .reviews import reviews_bp
+from .roles import roles_bp
+from .teams import teams_bp
+from .tenants import tenants_bp
 from .webhooks import webhooks_bp
 
 __all__ = [
@@ -19,5 +22,8 @@ __all__ = [
     "providers_bp",
     "repos_bp",
     "reviews_bp",
+    "roles_bp",
+    "teams_bp",
+    "tenants_bp",
     "webhooks_bp",
 ]

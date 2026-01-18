@@ -46,7 +46,7 @@ spec:
         - name: PORT
           value: "3000"
         - name: FLASK_API_URL
-          value: "/api"
+          value: "http://flask-backend:5000"
         resources:
           limits:
             cpu: 500m
