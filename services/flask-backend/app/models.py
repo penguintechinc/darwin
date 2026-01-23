@@ -14,15 +14,21 @@ VALID_ROLES = ["admin", "maintainer", "viewer"]
 
 
 def init_db(app: Flask) -> DAL:
-    """Initialize database connection and define tables."""
+    """Initialize database connection and define tables.
+
+    NOTE: PyDAL migrations are DISABLED (migrate=False).
+    Schema is managed by SQLAlchemy + Alembic (see app/db/).
+    PyDAL is used for runtime queries only.
+    """
     db_uri = Config.get_db_uri()
 
     db = DAL(
         db_uri,
         pool_size=Config.DB_POOL_SIZE,
-        migrate=True,
+        migrate=False,  # Schema managed by SQLAlchemy/Alembic
         check_reserved=["all"],
         lazy_tables=False,
+        fake_migrate_all=True,  # Map to existing schema without modifying
     )
 
     # Define users table
@@ -94,7 +100,7 @@ def init_db(app: Flask) -> DAL:
         Field("title", "string", length=255),
         Field("body", "text"),
         Field("suggestion", "text"),
-        Field("source", "string", length=64),
+        Field("linter_source", "string", length=64),
         Field("linter_rule_id", "string", length=128),
         Field("platform_comment_id", "string", length=128),
         Field("status", "string", default="open", requires=IS_IN_SET(
@@ -463,7 +469,7 @@ def list_reviews(platform: Optional[str] = None,
 
 def create_comment(review_id: int, file_path: str, line_start: int,
                   line_end: int, category: str, severity: str,
-                  title: str, body: str, source: str,
+                  title: str, body: str, linter_source: str,
                   suggestion: Optional[str] = None,
                   linter_rule_id: Optional[str] = None) -> dict:
     """Create a new review comment."""
@@ -477,7 +483,7 @@ def create_comment(review_id: int, file_path: str, line_start: int,
         severity=severity,
         title=title,
         body=body,
-        source=source,
+        linter_source=linter_source,
         suggestion=suggestion,
         linter_rule_id=linter_rule_id,
     )

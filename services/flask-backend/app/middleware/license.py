@@ -11,7 +11,17 @@ from typing import Callable, Optional, Any, Dict
 from flask import current_app, g, jsonify
 
 import sys
-sys.path.insert(0, '/home/penguin/code/darwin/shared')
+import os
+
+# Add licensing module to path - works both locally and in container
+# Container: /app/licensing, Local: PROJECT_ROOT/shared/licensing
+app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+shared_dir = os.path.join(os.path.dirname(app_dir), 'shared')
+if os.path.exists(shared_dir):
+    sys.path.insert(0, shared_dir)
+else:
+    # In container, licensing is at /app/licensing
+    sys.path.insert(0, app_dir)
 
 from licensing.python_client import (
     PenguinTechLicenseClient,

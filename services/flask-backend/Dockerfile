@@ -9,12 +9,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    libicu-dev \
+    pkg-config \
     git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for layer caching
-COPY requirements.txt .
+COPY services/flask-backend/requirements.txt .
 
 # Create virtual environment and install dependencies
 RUN python -m venv /opt/venv
@@ -51,7 +53,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     lsb-release \
     apt-transport-https \
-    software-properties-common \
     unzip \
     tar \
     && rm -rf /var/lib/apt/lists/*
@@ -72,12 +73,12 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
 
-# Install GitLab CLI (glab)
-RUN curl -sSL https://gitlab.com/gitlab-org/cli/-/releases/download/v1.47.0/glab_1.47.0_Linux_x86_64.tar.gz | \
-    tar -xz -C /tmp && \
-    mv /tmp/bin/glab /usr/local/bin/ && \
-    chmod +x /usr/local/bin/glab && \
-    rm -rf /tmp/bin
+# # Install GitLab CLI (glab)
+# RUN curl -sSL https://gitlab.com/gitlab-org/cli/-/releases/download/v1.47.0/glab_1.47.0_Linux_x86_64.tar.gz | \
+#     tar -xz -C /tmp && \
+#     mv /tmp/bin/glab /usr/local/bin/ && \
+#     chmod +x /usr/local/bin/glab && \
+#     rm -rf /tmp/bin
 
 # ============================================================================
 # Node.js and JavaScript/TypeScript Linters
@@ -140,8 +141,8 @@ RUN curl -sSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.11/t
     -o /usr/local/bin/tfsec && \
     chmod +x /usr/local/bin/tfsec
 
-# Install checkov (IaC security scanner - Python-based)
-RUN pip3 install --no-cache-dir checkov==3.2.319
+# # Install checkov (IaC security scanner - Python-based)
+# RUN pip3 install --no-cache-dir checkov==3.2.319
 
 # ============================================================================
 # Ansible Linters
@@ -218,14 +219,14 @@ RUN curl -sSL https://github.com/CycloneDX/cyclonedx-cli/releases/download/v0.27
 # ============================================================================
 
 # Install Infer (Facebook's static analyzer for Java, C, C++, Objective-C)
-RUN apt-get update && \
-    apt-get install -y opam m4 && \
-    rm -rf /var/lib/apt/lists/* && \
-    curl -sSL https://github.com/facebook/infer/releases/download/v1.2.0/infer-linux-x64-v1.2.0.tar.xz \
-    -o /tmp/infer.tar.xz && \
-    tar -C /opt -xf /tmp/infer.tar.xz && \
-    ln -s /opt/infer-linux-x64-v1.2.0/bin/infer /usr/local/bin/infer && \
-    rm /tmp/infer.tar.xz
+# RUN apt-get update && \
+#     apt-get install -y opam m4 && \
+#     rm -rf /var/lib/apt/lists/* && \
+#     curl -sSL https://github.com/facebook/infer/releases/download/v1.2.0/infer-linux-x64-v1.2.0.tar.xz \
+#     -o /tmp/infer.tar.xz && \
+#     tar -C /opt -xf /tmp/infer.tar.xz && \
+#     ln -s /opt/infer-linux-x64-v1.2.0/bin/infer /usr/local/bin/infer && \
+#     rm /tmp/infer.tar.xz
 
 # Install Cppcheck (C/C++ static analyzer)
 RUN apt-get update && \
@@ -238,14 +239,14 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Spotbugs (Java static analyzer) - requires Java
-RUN apt-get update && \
-    apt-get install -y openjdk-17-jdk-headless && \
-    rm -rf /var/lib/apt/lists/* && \
-    curl -sSL https://github.com/spotbugs/spotbugs/releases/download/4.8.6/spotbugs-4.8.6.tgz \
-    -o /tmp/spotbugs.tgz && \
-    tar -C /opt -xzf /tmp/spotbugs.tgz && \
-    ln -s /opt/spotbugs-4.8.6/bin/spotbugs /usr/local/bin/spotbugs && \
-    rm /tmp/spotbugs.tgz
+# RUN apt-get update && \
+#     apt-get install -y openjdk-17-jdk-headless && \
+#     rm -rf /var/lib/apt/lists/* && \
+#     curl -sSL https://github.com/spotbugs/spotbugs/releases/download/4.8.6/spotbugs-4.8.6.tgz \
+#     -o /tmp/spotbugs.tgz && \
+#     tar -C /opt -xzf /tmp/spotbugs.tgz && \
+#     ln -s /opt/spotbugs-4.8.6/bin/spotbugs /usr/local/bin/spotbugs && \
+#     rm /tmp/spotbugs.tgz
 
 # Install PMD (Java source code analyzer)
 RUN curl -sSL https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.8.0/pmd-dist-7.8.0-bin.zip \
@@ -283,12 +284,12 @@ RUN npm install -g jsonlint@1.6.3
 # Ruby and PHP linters (for comprehensive coverage)
 # ============================================================================
 
-# Install Ruby and rubocop
-RUN apt-get update && \
-    apt-get install -y ruby-full && \
-    gem install rubocop -v 1.69.2 && \
-    rm -rf /var/lib/apt/lists/*
-
+# # Install Ruby and rubocop
+# RUN apt-get update && \
+#     apt-get install -y ruby-full && \
+#     gem install rubocop -v 1.69.2 && \
+#     rm -rf /var/lib/apt/lists/*
+# 
 # Install PHP and phpcs
 RUN apt-get update && \
     apt-get install -y php-cli php-xml composer && \
@@ -308,8 +309,16 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Application Setup
 # ============================================================================
 
-# Copy application code
-COPY --chown=appuser:appuser . .
+# Copy shared licensing module
+COPY --chown=appuser:appuser shared/licensing ./licensing
+
+# Copy application code (from services/flask-backend when built from project root)
+COPY --chown=appuser:appuser services/flask-backend/app ./app
+COPY --chown=appuser:appuser services/flask-backend/alembic ./alembic
+COPY --chown=appuser:appuser services/flask-backend/alembic.ini ./alembic.ini
+COPY --chown=appuser:appuser services/flask-backend/run.py ./run.py
+COPY --chown=appuser:appuser services/flask-backend/gunicorn.conf.py ./gunicorn.conf.py
+COPY --chown=appuser:appuser services/flask-backend/wsgi.py ./wsgi.py
 
 # Switch to non-root user
 USER appuser
