@@ -5,8 +5,10 @@
 Flask==3.1.0
 flask-cors==5.0.0
 
-# Database
-pydal==20241031.1
+# Database - SQLAlchemy for schema/migrations, PyDAL for runtime
+SQLAlchemy==2.0.36
+alembic==1.14.0
+pydal==20260118.1
 psycopg2-binary==2.9.10
 
 # Authentication
@@ -41,6 +43,8 @@ cryptography==44.0.0
 
 # Git operations
 GitPython==3.1.44
+
+# License client (copied from ../../shared/licensing)
 
 # Development
 pytest==8.3.4

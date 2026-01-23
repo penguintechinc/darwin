@@ -4,6 +4,7 @@
 import os
 import sys
 import time
+import subprocess
 
 from app import create_app
 from app.auth import hash_password
@@ -61,11 +62,40 @@ def create_default_admin():
         print(f"Database has {user_count} existing user(s), skipping default admin creation")
 
 
+def run_migrations():
+    """Run Alembic database migrations."""
+    print("Running database migrations...")
+    try:
+        # Run alembic upgrade head
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        print(result.stdout)
+        print("Database migrations completed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: Database migration failed: {e}")
+        print(f"STDOUT: {e.stdout}")
+        print(f"STDERR: {e.stderr}")
+        return False
+    except FileNotFoundError:
+        print("WARNING: Alembic not found, skipping migrations")
+        return True
+
+
 def main():
     """Main entry point."""
     # Wait for database
     if not wait_for_database():
         print("ERROR: Could not connect to database after maximum retries")
+        sys.exit(1)
+
+    # Run database migrations (SQLAlchemy)
+    if not run_migrations():
+        print("ERROR: Database migrations failed")
         sys.exit(1)
 
     # Create Flask app
