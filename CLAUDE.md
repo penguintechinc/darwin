@@ -1,5 +1,62 @@
 # Project Template - Claude Code Context
 
+## 🚫 DO NOT MODIFY THIS FILE OR `.claude/` STANDARDS
+
+**These are centralized template files that will be overwritten when standards are updated.**
+
+- ❌ **NEVER edit** `CLAUDE.md`, `.claude/*.md`, `docs/STANDARDS.md`, or `docs/standards/*.md`
+- ✅ **CREATE NEW FILES** for app-specific context:
+  - `docs/APP_STANDARDS.md` - App-specific architecture, requirements, context
+  - `.claude/app.md` - App-specific rules for Claude (create if needed)
+  - `.claude/[feature].md` - Feature-specific context (create as needed)
+
+---
+
+## ⚠️ CRITICAL RULES - READ FIRST
+
+**Language & Versions:**
+- **Python 3.13** default (3.12+ minimum) - use for most applications
+- **Go 1.24.x** only for >10K req/sec (1.23.x fallback allowed)
+- **Node.js 18+** for React frontend
+
+**Database (MANDATORY):**
+- **SQLAlchemy**: Schema creation and Alembic migrations ONLY
+- **PyDAL**: ALL runtime database operations - NO EXCEPTIONS
+- Support ALL: PostgreSQL, MySQL, MariaDB Galera, SQLite
+
+**Git Rules:**
+- **NEVER commit** unless explicitly requested
+- **NEVER push** to remote repositories
+- Run security scans before commit (bandit, gosec, npm audit)
+
+**Code Quality:**
+- ALL code must pass linting before commit
+- No hardcoded secrets or credentials
+- Input validation mandatory
+
+**Architecture:**
+- Web UI and API are ALWAYS separate containers
+- Flask-Security-Too mandatory for authentication
+- REST APIs use `/api/v{major}/endpoint` versioning
+
+**Container Images (CRITICAL):**
+- **Debian 12 (bookworm) ONLY** - use `-slim` variants when available
+- **NEVER use Alpine** - causes too many compatibility issues
+- Fallback order: Debian 12 → Debian 11 → Debian 13 → Ubuntu (if no Debian option)
+- Examples: `postgres:16-bookworm`, `redis:7-bookworm`, `python:3.13-slim-bookworm`
+
+**Kubernetes Deployments:**
+- **Support BOTH**: Helm v3 (packaged) AND Kustomize (prescriptive) - every project needs both
+- All K8s files in `k8s/` directory (helm/, kustomize/, manifests/)
+- Always set resource limits (cpu/memory) and health checks (liveness/readiness)
+- Environment overlays: dev, staging, prod with appropriate resource scaling
+
+📚 **Detailed Standards**: See `.claude/` directory for language and service-specific rules
+
+---
+
+**⚠️ Important**: Application-specific context should be added to `docs/APP_STANDARDS.md` instead of this file. This allows the template CLAUDE.md to be updated across all projects without losing app-specific information. See `docs/APP_STANDARDS.md` for app-specific architecture, requirements, and context.
+
 ## Project Overview
 
 This is a comprehensive project template incorporating best practices and patterns from Penguin Tech Inc projects. It provides a standardized foundation for multi-language projects with enterprise-grade infrastructure and integrated licensing.
@@ -27,6 +84,7 @@ This is a comprehensive project template incorporating best practices and patter
   - Network-intensive services
   - Low-latency requirements (<10ms)
   - CPU-bound operations requiring maximum throughput
+  - Go 1.23.x acceptable as fallback if 1.24.x compatibility constraints exist
 
 **Python Stack:**
 - **Python**: 3.13 for all applications (3.12+ minimum)
@@ -44,7 +102,7 @@ This is a comprehensive project template incorporating best practices and patter
 - **JavaScript/TypeScript**: Modern ES2022+ standards
 
 **Go Stack (When Required):**
-- **Go**: 1.24.x (latest patch version, minimum 1.24.2)
+- **Go**: 1.24.x (latest patch version, minimum 1.24.2); Go 1.23.x acceptable as fallback if compatibility constraints exist
 - **Database**: Use DAL with PostgreSQL/MySQL cross-support (e.g., GORM, sqlx)
 - Use only for traffic-intensive applications
 
@@ -65,24 +123,25 @@ This is a comprehensive project template incorporating best practices and patter
   - **MariaDB Galera**: Cluster support with WSREP, auto-increment, transaction handling
   - **SQLite**: Development and lightweight deployments
 - **Database Libraries (Python)**:
-  - **SQLAlchemy**: Used ONLY for database initialization and schema creation
-  - **PyDAL**: Used for ALL runtime database operations and migrations
+  - **SQLAlchemy + Alembic**: Database schema definition and version-controlled migrations
+  - **PyDAL**: Used for ALL runtime database operations only
   - `DB_TYPE` must match PyDAL connection string prefixes exactly
 - **Database Libraries (Go)**: GORM or sqlx (mandatory for cross-database support)
   - Must support PostgreSQL, MySQL/MariaDB, and SQLite
   - Stable, well-maintained library required
-- **Migrations**: PyDAL handles all migrations via `migrate=True`
+- **Migrations**: Alembic for schema migrations, PyDAL for runtime operations
 - **MariaDB Galera Support**: Handle Galera-specific requirements (WSREP, auto-increment, transactions)
 
-📚 **Supported DB_TYPE Values**: See [Development Standards - Database Standards](docs/STANDARDS.md#database-standards) for complete list and configuration details.
+📚 **Supported DB_TYPE Values**: See [Database Standards](docs/standards/DATABASE.md) for complete list and configuration details.
 
 ### Security & Authentication
 - **Flask-Security-Too**: Mandatory for all Flask applications
-  - Role-based access control (RBAC)
+  - Role-based access control (RBAC) with OAuth2-style scopes
   - User authentication and session management
   - Password hashing with bcrypt
   - Email confirmation and password reset
   - Two-factor authentication (2FA)
+- **Permissions Model**: Global, container/team, and resource-level roles with custom scope-based permissions
 - **TLS**: Enforce TLS 1.2 minimum, prefer TLS 1.3
 - **HTTP3/QUIC**: Utilize UDP with TLS for high-performance connections where possible
 - **Authentication**: JWT and MFA (standard), mTLS where applicable
@@ -146,7 +205,7 @@ project-name/
 ├── .github/             # CI/CD pipelines and templates
 │   └── workflows/       # GitHub Actions for each container
 ├── services/            # Microservices (separate containers by default)
-│   ├── flask-backend/   # Flask + PyDAL backend (auth, users, standard APIs)
+│   ├── flask-backend/   # Flask + PyDAL teams API backend (auth, teams, users, standard APIs)
 │   ├── go-backend/      # Go high-performance backend (XDP/AF_XDP, NUMA)
 │   ├── webui/           # Node.js + React frontend shell
 │   └── connector/       # Integration services (placeholder)
@@ -172,13 +231,14 @@ project-name/
 
 | Container | Purpose | When to Use |
 |-----------|---------|-------------|
-| **flask-backend** | Standard APIs, auth, CRUD | <10K req/sec, business logic |
+| **teams-api** (flask-backend) | Standard APIs, auth, teams, user management | <10K req/sec, business logic |
 | **go-backend** | High-performance networking | >10K req/sec, <10ms latency |
 | **webui** | Node.js + React frontend | All frontend applications |
 
 **Default Roles**: Admin (full access), Maintainer (read/write, no user mgmt), Viewer (read-only)
+**Team Roles**: Owner, Admin, Member, Viewer (team-scoped permissions)
 
-📚 **Architecture diagram and details**: [Development Standards - Microservices Architecture](docs/STANDARDS.md#microservices-architecture)
+📚 **Architecture diagram and details**: [Architecture Standards](docs/standards/ARCHITECTURE.md)
 
 ## Version Management System
 
@@ -447,18 +507,24 @@ make license-check-features  # Check available features
 
 ## Development Standards
 
-Comprehensive development standards are documented separately to keep this file concise.
+**⚠️ Documentation Structure:**
+- **Company-wide standards**: [docs/STANDARDS.md](docs/STANDARDS.md) (index) + [docs/standards/](docs/standards/) (detailed categories)
+- **App-specific standards**: [docs/APP_STANDARDS.md](docs/APP_STANDARDS.md) (application-specific architecture, requirements, context)
 
-📚 **Complete Standards Documentation**: [Development Standards](docs/STANDARDS.md)
+Comprehensive development standards are organized by category in `docs/standards/` directory. The main STANDARDS.md serves as an index with quick reference.
+
+📚 **Complete Standards Documentation**: [Development Standards](docs/STANDARDS.md) (index to 12 category files)
 
 ### Quick Reference
 
 **API Versioning**:
 - ALL REST APIs MUST use versioning: `/api/v{major}/endpoint` format
 - Semantic versioning for major versions only in URL
-- Support current and previous versions (N-1) minimum
+- Support current and 2 previous versions (N-2) minimum
 - Add deprecation headers to old versions
 - Document migration paths for version changes
+- Keep APIs simple and extensible: use flexible inputs, backward-compatible responses
+- Leverage and reuse existing APIs where possible
 
 **Database Standards**:
 - SQLAlchemy for database initialization and schema creation only
@@ -469,15 +535,26 @@ Comprehensive development standards are documented separately to keep this file 
 - Connection pooling and retry logic required
 - Async/multi-threading based on workload (see Performance Optimization)
 
+**API Design Principles**:
+- **Simple & Extensible**: Keep REST and gRPC APIs simple, use flexible input structures and backward-compatible responses
+- **Leverage Existing**: Reuse existing APIs where possible, avoid creating duplicate endpoints
+- **Consistent Versioning**: All APIs use `/api/v{major}/endpoint` versioning for REST and semantic versioning for gRPC
+- **Deprecation Support**: Maintain N-2 API versions minimum (current + 2 previous), include deprecation headers and migration paths
+
 **Protocol Support**:
-- **Inter-container communication** (within cluster): gRPC or HTTP/3 (QUIC) preferred
-  - Lower latency, better performance, binary protocols
-  - Use for service-to-service calls between containers
-- **External communication** (clients, integrations): REST API over HTTPS
+- **External Communication** (clients, third-party integrations): REST API over HTTPS
   - Flask REST endpoints for client-facing APIs
-  - Used for outside-of-cluster integrations and third-party access
+  - Supports external consumers and web UIs
+  - Versioned: `/api/v1/endpoint`, `/api/v2/endpoint`, etc.
+- **Inter-Container Communication** (within cluster): gRPC preferred for best performance
+  - Service-to-service calls between containers in same namespace/cluster
+  - Binary protocol with Protocol Buffers for lower latency and bandwidth
+  - Use for internal APIs between microservices
+  - Fallback to REST over HTTP/2 if gRPC unavailable
+- **HTTP/3 (QUIC)**: Consider for high-performance inter-container scenarios (>10K req/sec)
+  - UDP-based, reduced latency, connection multiplexing
 - Environment variables for protocol configuration
-- Multi-protocol implementation required
+- Multi-protocol implementation: REST for external, gRPC for internal
 
 **Performance Optimization (Python):**
 - Dataclasses with slots mandatory (30-50% memory reduction)
@@ -507,7 +584,7 @@ Comprehensive development standards are documented separately to keep this file 
 - **DO NOT include MarchProxy in default deployment** - it's external infrastructure
 - **Generate MarchProxy-compatible import configuration** in `config/marchproxy/`
 - Import config via MarchProxy's API: `POST /api/v1/services/import`
-- See [Development Standards - MarchProxy Integration](docs/STANDARDS.md#marchproxy-api-gateway-integration)
+- See [Integration Standards - MarchProxy](docs/standards/INTEGRATIONS.md)
 
 **Docker Standards**:
 - Multi-arch builds (amd64/arm64)
@@ -557,11 +634,11 @@ Comprehensive development standards are documented separately to keep this file 
 - Resilience
 - Continuous deployment
 
-📚 **Detailed Architecture Patterns**: See [Development Standards - Microservices Architecture](docs/STANDARDS.md#microservices-architecture)
+📚 **Detailed Architecture Patterns**: See [Architecture Standards](docs/standards/ARCHITECTURE.md)
 
 ## Common Integration Patterns
 
-📚 **Complete code examples and integration patterns**: [Development Standards](docs/STANDARDS.md)
+📚 **Complete code examples and integration patterns**: [Standards Index](docs/STANDARDS.md) | [Authentication](docs/standards/AUTHENTICATION.md) | [Database](docs/standards/DATABASE.md)
 
 Key integration patterns documented:
 - Flask + Flask-Security-Too + PyDAL authentication
@@ -586,13 +663,22 @@ Key integration patterns documented:
 
 **Support**: support@penguintech.io | sales@penguintech.io | https://status.penguintech.io
 
-📚 **Detailed troubleshooting**: [Development Standards](docs/STANDARDS.md) | [License Guide](docs/licensing/license-server-integration.md)
+📚 **Detailed troubleshooting**: [Standards Index](docs/STANDARDS.md) | [License Guide](docs/licensing/license-server-integration.md)
 
 ## CI/CD & Workflows
 
 **Build Tags**: `beta-<epoch64>` (main) | `alpha-<epoch64>` (other) | `vX.X.X-beta` (version release) | `vX.X.X` (tagged release)
 
 **Version**: `.version` file in root, semver format, monitored by all workflows
+
+**Deployment Hosts**:
+- **Beta/Development**: `https://{repo_name_lowercase}.penguintech.io` (if online)
+  - Example: `project-template` → `https://project-template.penguintech.io`
+  - Deployed from `main` branch with `beta-*` tags
+- **Production**: Either custom domain or PenguinCloud subdomain
+  - **Custom Domain**: Application-specific (e.g., `https://waddlebot.io`)
+  - **PenguinCloud**: `https://{repo_name_lowercase}.penguincloud.io`
+  - Deployed from tagged releases (`vX.X.X`)
 
 ### Pre-Commit Checklist
 
@@ -630,7 +716,23 @@ docker compose up -d --build <service-name>
 
 **IMPORTANT:** `docker compose restart` and `docker restart` do NOT apply code changes - they only restart the existing container with old code. Always use `--build` to rebuild images with new code.
 
-📚 **Complete CI/CD documentation**: [Workflows](docs/WORKFLOWS.md) | [Standards](docs/STANDARDS.md)
+**Browser Cache & Hard Reload During Development:**
+- Developers will routinely perform hard reloads (Ctrl+Shift+R / Cmd+Shift+R) and cache clearing during development
+- DO NOT assume the browser cache contains stale assets or that developers haven't already cleared it
+- Implement proper cache headers and asset versioning in your frontend/static assets
+- Use content-based cache busting (e.g., hashing filenames: `app.abc123.js`) for production builds
+- Consider setting `Cache-Control: no-cache, must-revalidate` for development builds when appropriate
+
+📚 **Complete CI/CD documentation**: [Workflows](docs/WORKFLOWS.md) | [Standards Index](docs/STANDARDS.md)
+
+## Template Customization
+
+**Adding Languages/Services**: Create in `services/`, add Dockerfile, update CI/CD, add linting/testing, update docs.
+
+**Enterprise Integration**: License server, multi-tenancy, usage tracking, audit logging, monitoring.
+
+📚 **Detailed customization guides**: [Standards Index](docs/STANDARDS.md)
+
 
 ## License & Legal
 
@@ -640,13 +742,6 @@ docker compose up -d --build <service-name>
 
 The `LICENSE.md` file is located at the project root following industry standards. This project uses a modified AGPL-3.0 license with additional exceptions for commercial use and special provisions for companies employing contributors.
 
-## Template Customization
-
-**Adding Languages/Services**: Create in `services/`, add Dockerfile, update CI/CD, add linting/testing, update docs.
-
-**Enterprise Integration**: License server, multi-tenancy, usage tracking, audit logging, monitoring.
-
-📚 **Detailed customization guides**: [Development Standards](docs/STANDARDS.md)
 
 ---
 
