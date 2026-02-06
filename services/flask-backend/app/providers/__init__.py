@@ -8,7 +8,6 @@ from .claude import ClaudeProvider
 from .copilot import CopilotProvider
 from .ollama import OllamaProvider
 from .openai_provider import OpenAIProvider
-from ..models import get_ai_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +47,6 @@ def get_provider(name: str, config: ProviderConfig | None = None) -> AIProvider:
         - AI_MAX_TOKENS: Max tokens override
         - AI_TEMPERATURE: Temperature override
     """
-    if not get_ai_enabled():
-        raise ValueError(
-            "AI providers are disabled. Enable AI via environment variable "
-            "AI_ENABLED=true or API endpoint /api/v1/config/ai"
-        )
-
     provider_name = name.lower()
 
     if provider_name not in PROVIDERS:
@@ -149,12 +142,6 @@ def get_default_provider() -> AIProvider:
     Environment Variables:
         AI_PROVIDER: Default provider name (required)
     """
-    if not get_ai_enabled():
-        raise ValueError(
-            "AI providers are disabled. Enable AI via environment variable "
-            "AI_ENABLED=true or API endpoint /api/v1/config/ai"
-        )
-
     provider_name = os.getenv("AI_PROVIDER", "").lower()
 
     if not provider_name:

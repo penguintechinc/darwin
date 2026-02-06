@@ -6,10 +6,8 @@ Flask==3.1.0
 flask-cors==5.0.0
 
 # Database
-pydal==20251207.1
-psycopg2-binary==2.9.10  # PostgreSQL driver for PyDAL and SQLAlchemy
-pymysql==1.1.1  # MySQL/MariaDB driver for PyDAL and SQLAlchemy
-sqlalchemy==2.0.36
+pydal==20241031.1
+psycopg2-binary==2.9.10
 
 # Authentication
 PyJWT==2.10.1
@@ -44,11 +42,6 @@ cryptography==44.0.0
 # Git operations
 GitPython==3.1.44
 
-# Task Queue
-celery==5.4.0
-redis==5.2.1
-flower==2.0.1
-
 # Development
 pytest==8.3.4
 pytest-cov==6.0.0
@@ -57,4 +50,3 @@ flake8==7.1.1
 mypy==1.14.0
 bandit==1.8.0
 isort==5.13.2
-Flask-JWT-Extended==4.7.1

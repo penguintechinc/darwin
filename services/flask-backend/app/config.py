@@ -13,9 +13,6 @@ class Config:
 
     # JWT
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", SECRET_KEY)
-    JWT_TOKEN_LOCATION = ["headers"]
-    JWT_HEADER_NAME = "Authorization"
-    JWT_HEADER_TYPE = "Bearer"
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(
         minutes=int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "30"))
     )
@@ -34,9 +31,6 @@ class Config:
 
     # CORS
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
-
-    # AI Feature Flag
-    AI_ENABLED = os.getenv("AI_ENABLED", "true").lower() == "true"
 
     # AI Provider Configuration
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

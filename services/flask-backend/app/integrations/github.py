@@ -378,43 +378,6 @@ class GitHubClient:
             "PATCH", f"/repos/{owner}/{repo}/check-runs/{check_run_id}", json=payload
         )
 
-    async def list_pull_requests(
-        self, owner: str, repo: str, state: str = "open", per_page: int = 100
-    ) -> list[dict[str, Any]]:
-        """
-        List pull requests in a repository.
-
-        Args:
-            owner: Repository owner
-            repo: Repository name
-            state: PR state (open, closed, all). Default: open
-            per_page: Results per page (max 100)
-
-        Returns:
-            List of pull request data dictionaries
-        """
-        prs = []
-        page = 1
-
-        while True:
-            data = await self._request(
-                "GET",
-                f"/repos/{owner}/{repo}/pulls",
-                params={"state": state, "page": page, "per_page": per_page},
-            )
-
-            if not data:
-                break
-
-            prs.extend(data)
-
-            if len(data) < per_page:
-                break
-
-            page += 1
-
-        return prs
-
     @staticmethod
     def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
         """

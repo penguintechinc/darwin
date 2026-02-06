@@ -11,7 +11,7 @@ from .detector import LanguageDetector, DetectionResult
 from .linter import LinterOrchestrator, OrchestratorResult
 from .prompts import ReviewPrompts
 from ..providers.base import AIProvider, AIResponse
-from ..models import create_provider_usage, get_ai_enabled
+from ..models import create_provider_usage
 
 
 @dataclass(slots=True)
@@ -115,7 +115,7 @@ class ReviewEngine:
             pass
 
         # Review each file with AI
-        if ai_provider and get_ai_enabled():
+        if ai_provider:
             ai_categories = [c for c in categories if c != "linter"]
             for pr_file in pr_files:
                 if pr_file.status == "deleted" or not pr_file.patch:
@@ -179,7 +179,7 @@ class ReviewEngine:
                     result.comments.append(comment)
 
         # AI review of specific files
-        if ai_provider and get_ai_enabled():
+        if ai_provider:
             ai_categories = [c for c in categories if c != "linter"]
             # For whole repo review, we'd need to select files intelligently
             # This is a placeholder for full implementation
@@ -207,10 +207,6 @@ class ReviewEngine:
         Returns:
             List of review comments
         """
-        # Early return if AI is disabled
-        if not get_ai_enabled():
-            return []
-
         comments = []
 
         # Determine file language

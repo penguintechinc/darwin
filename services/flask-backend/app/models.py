@@ -14,44 +14,15 @@ VALID_ROLES = ["admin", "maintainer", "viewer"]
 
 
 def init_db(app: Flask) -> DAL:
-    """Initialize database connection and define tables using PyDAL's built-in migration handling."""
+    """Initialize database connection and define tables."""
     db_uri = Config.get_db_uri()
 
-    # Initialize database with migration support
-    # Note: Using fake_migrate_all=True to handle concurrent worker initialization
-    # This allows multiple gunicorn workers to start simultaneously without conflicts
-    # Migration files stored in /tmp since /app may be read-only in containers
-    import os
-    migration_folder = os.environ.get("PYDAL_MIGRATION_FOLDER", "/tmp/pydal_migrations")
-    os.makedirs(migration_folder, exist_ok=True)
-
-    # Always run migrations, PyDAL handles existing tables gracefully
-    # Use fake_migrate_all=True to sync with existing schema created via SQL migrations
-    # This prevents PyDAL from trying to recreate tables that already exist
     db = DAL(
         db_uri,
         pool_size=Config.DB_POOL_SIZE,
         migrate=True,
-        fake_migrate_all=True,
         check_reserved=["all"],
         lazy_tables=False,
-        folder=migration_folder,
-    )
-
-    # Define tenants table FIRST - Required before users due to default_tenant_id reference
-    db.define_table(
-        "tenants",
-        Field("name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
-        Field("slug", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
-        Field("description", "text"),
-        Field("is_active", "boolean", default=True),
-        Field("max_users", "integer", default=0),  # 0 = unlimited
-        Field("max_repositories", "integer", default=0),  # 0 = unlimited
-        Field("max_teams", "integer", default=0),  # 0 = unlimited
-        Field("settings", "json", default={}),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        format="%(name)s",
     )
 
     # Define users table
@@ -67,11 +38,6 @@ def init_db(app: Flask) -> DAL:
             VALID_ROLES,
             error_message=f"Role must be one of: {', '.join(VALID_ROLES)}"
         )),
-        Field("global_role", "string", length=50, default="viewer", requires=IS_IN_SET(
-            VALID_ROLES,
-            error_message=f"Global role must be one of: {', '.join(VALID_ROLES)}"
-        )),
-        Field("default_tenant_id", "reference tenants", ondelete="SET NULL"),
         Field("is_active", "boolean", default=True),
         Field("created_at", "datetime", default=datetime.utcnow),
         Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
@@ -87,47 +53,9 @@ def init_db(app: Flask) -> DAL:
         Field("created_at", "datetime", default=datetime.utcnow),
     )
 
-    # Define teams table - Department/Project groups within tenants
-    # IMPORTANT: Must be defined before reviews and repo_configs which reference it
-    db.define_table(
-        "teams",
-        Field("tenant_id", "reference tenants", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
-        Field("name", "string", length=255, requires=IS_NOT_EMPTY()),
-        Field("slug", "string", length=128, requires=IS_NOT_EMPTY()),
-        Field("description", "text"),
-        Field("is_active", "boolean", default=True),
-        Field("is_default", "boolean", default=False),  # Default team for tenant
-        Field("settings", "json", default={}),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        format="%(name)s",
-    )
-
-    # Define custom_roles table - User-defined roles with scopes
-    # IMPORTANT: Must be defined before repository_members, tenant_members, team_members which reference it
-    db.define_table(
-        "custom_roles",
-        Field("tenant_id", "reference tenants", ondelete="CASCADE"),  # NULL = global role
-        Field("team_id", "reference teams", ondelete="CASCADE"),  # NULL = not team-specific
-        Field("name", "string", length=128, requires=IS_NOT_EMPTY()),
-        Field("slug", "string", length=128, requires=IS_NOT_EMPTY()),
-        Field("description", "text"),
-        Field("role_level", "string", requires=IS_IN_SET(["global", "tenant", "team", "resource"])),
-        Field("scopes", "json", requires=IS_NOT_EMPTY()),
-        Field("is_active", "boolean", default=True),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-        format="%(name)s",
-    )
-
     # Define reviews table - Main review requests
     db.define_table(
         "reviews",
-        # Multi-tenancy fields
-        Field("tenant_id", "reference tenants"),
-        Field("team_id", "reference teams"),
-        Field("triggered_by", "reference users"),
-        # Review identification
         Field("external_id", "string", length=64, unique=True),
         Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
         Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
@@ -166,7 +94,7 @@ def init_db(app: Flask) -> DAL:
         Field("title", "string", length=255),
         Field("body", "text"),
         Field("suggestion", "text"),
-        Field("review_source", "string", length=64),
+        Field("source", "string", length=64),
         Field("linter_rule_id", "string", length=128),
         Field("platform_comment_id", "string", length=128),
         Field("status", "string", default="open", requires=IS_IN_SET(
@@ -186,28 +114,9 @@ def init_db(app: Flask) -> DAL:
         Field("file_count", "integer"),
     )
 
-    # Define git_credentials table - Secure credential storage
-    # IMPORTANT: Must be defined before repo_configs which references it
-    db.define_table(
-        "git_credentials",
-        Field("name", "string", length=128),
-        Field("git_url_pattern", "string", length=255),
-        Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
-        Field("encrypted_credential", "blob"),
-        Field("ssh_key_passphrase", "blob"),
-        Field("created_by", "reference users"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-    )
-
     # Define repo_configs table - Per-repository configuration
     db.define_table(
         "repo_configs",
-        # Multi-tenancy fields
-        Field("tenant_id", "reference tenants", ondelete="CASCADE"),
-        Field("team_id", "reference teams", ondelete="CASCADE"),
-        Field("owner_id", "reference users", ondelete="SET NULL"),
-        # Repository identification
         Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
         Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
         Field("enabled", "boolean", default=True),
@@ -219,39 +128,9 @@ def init_db(app: Flask) -> DAL:
         Field("ignored_paths", "json"),
         Field("custom_rules", "json"),
         Field("webhook_secret", "string", length=255),
-        # Polling configuration
-        Field("polling_enabled", "boolean", default=False),
-        Field("polling_interval_minutes", "integer", default=5),
-        Field("last_poll_at", "datetime"),
-        # Organization grouping (for dashboard drill-down)
-        Field("platform_organization", "string", length=255),
-        # Display settings
-        Field("display_name", "string", length=255),
-        Field("description", "text"),
-        Field("is_active", "boolean", default=True),
-        # Credential selection
-        Field("credential_id", "reference git_credentials", ondelete="SET NULL"),
-        # Advanced settings
-        Field("max_review_age_hours", "integer", default=168),  # 7 days
-        Field("skip_patterns", "json"),
         Field("created_at", "datetime", default=datetime.utcnow),
         Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
         format="%(platform)s/%(repository)s",
-    )
-
-    # Define repository_members table - Per-user repository access and credentials
-    db.define_table(
-        "repository_members",
-        Field("repository_id", "reference repo_configs", ondelete="CASCADE"),
-        Field("user_id", "reference users", ondelete="CASCADE"),
-        Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
-            ["owner", "maintainer", "viewer", "custom"]
-        )),
-        Field("custom_role_id", "reference custom_roles", ondelete="SET NULL"),
-        Field("scopes", "json", default=[]),
-        Field("personal_token_id", "reference git_credentials", ondelete="SET NULL"),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
     )
 
     # Define provider_usage table - AI token usage tracking
@@ -268,14 +147,27 @@ def init_db(app: Flask) -> DAL:
         Field("created_at", "datetime", default=datetime.utcnow),
     )
 
+    # Define git_credentials table - Secure credential storage
+    db.define_table(
+        "git_credentials",
+        Field("name", "string", length=128),
+        Field("git_url_pattern", "string", length=255),
+        Field("auth_type", "string", requires=IS_IN_SET(["https_token", "ssh_key"])),
+        Field("encrypted_credential", "blob"),
+        Field("ssh_key_passphrase", "blob"),
+        Field("created_by", "reference users"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
+
     # Define ai_model_config table - AI model preferences per category
     db.define_table(
         "ai_model_config",
         Field("config_name", "string", length=128, unique=True, default="default"),
         Field("security_enabled", "boolean", default=True),
-        Field("security_model", "string", length=128, default="granite-code:20b"),
+        Field("security_model", "string", length=128, default="granite-code:34b"),
         Field("best_practices_enabled", "boolean", default=True),
-        Field("best_practices_model", "string", length=128, default="codestral:22b"),
+        Field("best_practices_model", "string", length=128, default="llama3.3:70b"),
         Field("framework_enabled", "boolean", default=True),
         Field("framework_model", "string", length=128, default="codestral:22b"),
         Field("iac_enabled", "boolean", default=True),
@@ -341,49 +233,6 @@ def init_db(app: Flask) -> DAL:
         Field("created_at", "datetime", default=datetime.utcnow),
         Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
         format="%(config_key)s",
-    )
-
-    # Define tenant_members table - User-tenant associations with roles
-    db.define_table(
-        "tenant_members",
-        Field("tenant_id", "reference tenants", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
-        Field("user_id", "reference users", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
-        Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
-            ["admin", "maintainer", "viewer", "custom"]
-        )),
-        Field("custom_role_id", "reference custom_roles", ondelete="SET NULL"),
-        Field("scopes", "json", default=[]),
-        Field("is_active", "boolean", default=True),
-        Field("joined_at", "datetime", default=datetime.utcnow),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-    )
-
-    # Define team_members table - User-team associations with roles
-    db.define_table(
-        "team_members",
-        Field("team_id", "reference teams", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
-        Field("user_id", "reference users", ondelete="CASCADE", requires=IS_NOT_EMPTY()),
-        Field("role", "string", length=50, default="viewer", requires=IS_IN_SET(
-            ["admin", "maintainer", "viewer", "custom"]
-        )),
-        Field("custom_role_id", "reference custom_roles", ondelete="SET NULL"),
-        Field("scopes", "json", default=[]),
-        Field("is_active", "boolean", default=True),
-        Field("joined_at", "datetime", default=datetime.utcnow),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
-    )
-
-    # Define scopes table - Available permission scopes
-    db.define_table(
-        "scopes",
-        Field("permission_scope", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
-        Field("description", "text"),
-        Field("category", "string", length=64),
-        Field("scope_level", "string", requires=IS_IN_SET(["global", "tenant", "team", "resource"])),
-        Field("created_at", "datetime", default=datetime.utcnow),
-        format="%(permission_scope)s",
     )
 
     # Commit table definitions
@@ -614,7 +463,7 @@ def list_reviews(platform: Optional[str] = None,
 
 def create_comment(review_id: int, file_path: str, line_start: int,
                   line_end: int, category: str, severity: str,
-                  title: str, body: str, review_source: str,
+                  title: str, body: str, source: str,
                   suggestion: Optional[str] = None,
                   linter_rule_id: Optional[str] = None) -> dict:
     """Create a new review comment."""
@@ -628,7 +477,7 @@ def create_comment(review_id: int, file_path: str, line_start: int,
         severity=severity,
         title=title,
         body=body,
-        review_source=review_source,
+        source=source,
         suggestion=suggestion,
         linter_rule_id=linter_rule_id,
     )
@@ -760,105 +609,6 @@ def list_repo_configs(platform: Optional[str] = None,
 
     configs = db(query).select(orderby=db.repo_configs.repository)
     return [c.as_dict() for c in configs]
-
-
-def create_repository(platform: str, repository: str, organization: Optional[str] = None,
-                     credential_id: Optional[int] = None, **kwargs) -> dict:
-    """Create a new repository configuration."""
-    db = get_db()
-    repo_id = db.repo_configs.insert(
-        platform=platform,
-        repository=repository,
-        platform_organization=organization,
-        credential_id=credential_id,
-        **kwargs
-    )
-    db.commit()
-    return get_repository_by_id(repo_id)
-
-
-def get_repository_by_id(repo_id: int) -> Optional[dict]:
-    """Get repository configuration by ID."""
-    db = get_db()
-    repo = db(db.repo_configs.id == repo_id).select().first()
-    return repo.as_dict() if repo else None
-
-
-def list_repositories(platform: Optional[str] = None,
-                     organization: Optional[str] = None,
-                     enabled: Optional[bool] = None,
-                     page: int = 1,
-                     per_page: int = 20) -> tuple[list[dict], int]:
-    """List repositories with filtering and pagination."""
-    db = get_db()
-    offset = (page - 1) * per_page
-
-    # Build query
-    query = db.repo_configs.id > 0
-    if platform:
-        query &= db.repo_configs.platform == platform
-    if organization:
-        query &= db.repo_configs.platform_organization == organization
-    if enabled is not None:
-        query &= db.repo_configs.enabled == enabled
-
-    repos = db(query).select(
-        orderby=~db.repo_configs.created_at,
-        limitby=(offset, offset + per_page),
-    )
-    total = db(query).count()
-
-    return [r.as_dict() for r in repos], total
-
-
-def update_repository(repo_id: int, **kwargs) -> Optional[dict]:
-    """Update repository configuration."""
-    db = get_db()
-    db(db.repo_configs.id == repo_id).update(**kwargs)
-    db.commit()
-    return get_repository_by_id(repo_id)
-
-
-def delete_repository(repo_id: int) -> bool:
-    """Delete repository configuration."""
-    db = get_db()
-    result = db(db.repo_configs.id == repo_id).delete()
-    db.commit()
-    return result > 0
-
-
-def get_repositories_by_organization(platform: str, organization: str) -> list[dict]:
-    """Get all repositories for a specific platform and organization."""
-    db = get_db()
-    repos = db(
-        (db.repo_configs.platform == platform) &
-        (db.repo_configs.platform_organization == organization)
-    ).select(orderby=db.repo_configs.repository)
-    return [r.as_dict() for r in repos]
-
-
-def get_unique_organizations() -> list[dict]:
-    """Get list of unique organizations grouped by platform."""
-    db = get_db()
-    # Query for unique platform/organization combinations
-    rows = db(db.repo_configs.platform_organization != None).select(
-        db.repo_configs.platform,
-        db.repo_configs.platform_organization,
-        distinct=True,
-        orderby=db.repo_configs.platform | db.repo_configs.platform_organization
-    )
-
-    # Group by platform
-    result = {}
-    for row in rows:
-        platform = row.platform
-        org = row.platform_organization
-        if platform not in result:
-            result[platform] = []
-        if org and org not in result[platform]:
-            result[platform].append(org)
-
-    return result
 
 
 # ===========================
@@ -1086,63 +836,24 @@ def update_violation_status(violation_id: int, status: str) -> Optional[dict]:
 
 
 def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
-    """
-    Get installation config value with fallback to default.
-
-    Returns the default value when installation_config table doesn't exist.
-
-    Args:
-        key: Configuration key to retrieve
-        default: Default value if key not found or table doesn't exist
-
-    Returns:
-        Configuration value or default
-    """
-    try:
-        db = get_db()
-        config = db(db.installation_config.config_key == key).select().first()
-        return config.config_value if config else default
-    except Exception as e:
-        # Handle missing installation_config table
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
-            # Table doesn't exist yet, return default value
-            return default
-        else:
-            # Re-raise other types of database errors
-            raise
+    """Get installation config value."""
+    db = get_db()
+    config = db(db.installation_config.config_key == key).select().first()
+    return config.config_value if config else default
 
 
 def set_config_value(key: str, value: str) -> None:
-    """
-    Set installation config value with graceful fallback.
+    """Set installation config value."""
+    db = get_db()
 
-    Silently skips when installation_config table doesn't exist.
+    existing = db(db.installation_config.config_key == key).select().first()
 
-    Args:
-        key: Configuration key to set
-        value: Configuration value to store
-    """
-    try:
-        db = get_db()
+    if existing:
+        db(db.installation_config.config_key == key).update(config_value=value)
+    else:
+        db.installation_config.insert(config_key=key, config_value=value)
 
-        existing = db(db.installation_config.config_key == key).select().first()
-
-        if existing:
-            db(db.installation_config.config_key == key).update(config_value=value)
-        else:
-            db.installation_config.insert(config_key=key, config_value=value)
-
-        db.commit()
-    except Exception as e:
-        # Handle missing installation_config table
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
-            # Table doesn't exist yet, silently skip (will be available after migrations)
-            pass
-        else:
-            # Re-raise other types of database errors
-            raise
+    db.commit()
 
 
 def get_repo_count() -> int:
@@ -1167,376 +878,3 @@ def check_repo_limit(has_professional_license: bool) -> tuple[bool, int, int]:
     can_add = current_count < free_limit
 
     return can_add, current_count, free_limit
-
-
-# ===========================
-# AI Configuration Helper Functions
-# ===========================
-
-
-def get_ai_enabled() -> bool:
-    """
-    Get AI enabled status with fallback hierarchy.
-
-    Priority: Database -> Environment -> Default (True)
-
-    Returns:
-        bool: True if AI is enabled, False otherwise
-    """
-    try:
-        # Check database first
-        db_value = get_config_value("ai_enabled", default=None)
-        if db_value is not None:
-            return db_value.lower() == "true"
-    except Exception as e:
-        # Handle missing installation_config table
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
-            # Table doesn't exist yet, fall back to environment variable
-            pass
-        else:
-            # Re-raise other types of database errors
-            raise
-
-    # Fall back to environment variable
-    return Config.AI_ENABLED
-
-
-def set_ai_enabled(enabled: bool) -> None:
-    """
-    Set AI enabled status in database.
-
-    Args:
-        enabled: True to enable AI, False to disable
-    """
-    try:
-        set_config_value("ai_enabled", "true" if enabled else "false")
-    except Exception as e:
-        # Handle missing installation_config table
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
-            # Table doesn't exist yet, silently skip (will be available after migrations)
-            pass
-        else:
-            # Re-raise other types of database errors
-            raise
-
-
-def delete_ai_config() -> None:
-    """
-    Delete AI config from database, reverting to environment variable default.
-    """
-    try:
-        db = get_db()
-        db(db.installation_config.config_key == "ai_enabled").delete()
-        db.commit()
-    except Exception as e:
-        # Handle missing installation_config table
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
-            # Table doesn't exist yet, silently succeed (nothing to delete)
-            pass
-        else:
-            # Re-raise other types of database errors
-            raise
-
-
-def get_ai_config_source() -> str:
-    """
-    Get the source of the current AI configuration.
-
-    Returns:
-        str: "database", "environment", or "default"
-    """
-    try:
-        db_value = get_config_value("ai_enabled", default=None)
-        if db_value is not None:
-            return "database"
-    except Exception as e:
-        # Handle missing installation_config table
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
-            # Table doesn't exist yet, check environment or return default
-            pass
-        else:
-            # Re-raise other types of database errors
-            raise
-
-    # Check if environment variable is set
-    import os
-    if os.getenv("AI_ENABLED") is not None:
-        return "environment"
-
-    return "default"
-
-
-def initialize_ai_config() -> None:
-    """
-    Initialize AI config with default if not exists.
-
-    This is called on application startup to ensure the config key exists.
-    If no database value exists, it creates one based on the environment variable.
-
-    Handles the case where the installation_config table doesn't exist yet
-    (on first startup or during migrations).
-    """
-    db = get_db()
-    try:
-        existing = get_config_value("ai_enabled", default=None)
-        if existing is None:
-            # Initialize with environment variable or default
-            default_value = "true" if Config.AI_ENABLED else "false"
-            set_config_value("ai_enabled", default_value)
-    except Exception as e:
-        # Rollback the transaction to clear error state
-        db.rollback()
-        # Table doesn't exist yet - this is normal on first startup
-        # The table will be created on next restart or config can be set via API
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str or "failed sql transaction" in error_str:
-            print(f"Installation config table not yet created, skipping initialization. "
-                  f"AI configuration can be set later via API.")
-        else:
-            # Re-raise other types of database errors
-            raise
-
-
-def initialize_admin_user() -> None:
-    """Initialize default admin user in default tenant if none exists.
-
-    Creates admin user with:
-    - email: admin@localhost.local
-    - password: admin123 (bcrypt hashed)
-    - role: admin
-    - global_role: admin
-    - default_tenant_id: 1 (default tenant)
-
-    Adds admin to default tenant (id=1) as admin role
-    Adds admin to default team (id=1) as admin role
-
-    Only creates if admin doesn't already exist (checked by email).
-    """
-    from .auth import hash_password
-
-    db = get_db()
-
-    try:
-        admin_email = "admin@localhost.local"
-
-        # Check if admin already exists by email
-        existing_admin = db(db.users.email == admin_email).select().first()
-        if existing_admin:
-            print(f"Admin user already exists: {admin_email} (ID: {existing_admin.id})")
-            return
-
-        print(f"No admin user found, creating default admin user: {admin_email}")
-
-        # Ensure default tenant exists
-        default_tenant = db(db.tenants.slug == "default").select().first()
-        if not default_tenant:
-            print("Creating default tenant...")
-            tenant_id = db.tenants.insert(
-                name="Default",
-                slug="default",
-                description="Default tenant for all users",
-                is_active=True,
-                max_users=0,
-                max_repositories=0,
-                max_teams=0,
-                settings={},
-            )
-            db.commit()
-            print(f"Default tenant created with ID: {tenant_id}")
-
-            # Create default team for this tenant
-            print("Creating default team...")
-            team_id = db.teams.insert(
-                tenant_id=tenant_id,
-                name="Default",
-                slug="default",
-                description="Default team for all tenant members",
-                is_active=True,
-                is_default=True,
-                settings={},
-            )
-            db.commit()
-            print(f"Default team created with ID: {team_id}")
-        else:
-            tenant_id = default_tenant.id
-            print(f"Using existing default tenant (ID: {tenant_id})")
-
-            # Check if default team exists
-            default_team = db(
-                (db.teams.tenant_id == tenant_id) & (db.teams.is_default == True)
-            ).select().first()
-            if not default_team:
-                print("Creating default team...")
-                team_id = db.teams.insert(
-                    tenant_id=tenant_id,
-                    name="Default",
-                    slug="default",
-                    description="Default team for all tenant members",
-                    is_active=True,
-                    is_default=True,
-                    settings={},
-                )
-                db.commit()
-                print(f"Default team created with ID: {team_id}")
-            else:
-                team_id = default_team.id
-                print(f"Using existing default team (ID: {team_id})")
-
-        # Create admin user
-        print(f"Creating admin user: {admin_email}")
-        user_id = db.users.insert(
-            email=admin_email,
-            password_hash=hash_password("admin123"),
-            full_name="Administrator",
-            role="admin",
-            global_role="admin",
-            default_tenant_id=tenant_id,
-            is_active=True,
-        )
-        db.commit()
-        print(f"Admin user created with ID: {user_id}")
-
-        # Add admin to default tenant
-        print(f"Adding admin to default tenant (ID: {tenant_id})...")
-        tenant_member_id = db.tenant_members.insert(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            role="admin",
-            is_active=True,
-        )
-        db.commit()
-        print(f"Admin added to tenant with membership ID: {tenant_member_id}")
-
-        # Add admin to default team
-        print(f"Adding admin to default team (ID: {team_id})...")
-        team_member_id = db.team_members.insert(
-            team_id=team_id,
-            user_id=user_id,
-            role="admin",
-            is_active=True,
-        )
-        db.commit()
-        print(f"Admin added to team with membership ID: {team_member_id}")
-
-        print(f"Default admin user initialized: {admin_email} / admin123")
-        print("IMPORTANT: Change the default password immediately after first login!")
-
-    except Exception as e:
-        # Rollback the transaction to clear error state
-        db.rollback()
-        # Table doesn't exist yet - this is normal on first startup
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str or "failed sql transaction" in error_str:
-            print(f"Required tables not yet created, skipping admin user initialization. "
-                  f"Admin user will be created on next restart.")
-        else:
-            # Re-raise other types of database errors
-            raise
-
-
-def initialize_default_tenant() -> None:
-    """Create default tenant and team, migrate existing data."""
-    from .auth import hash_password
-
-    db = get_db()
-
-    try:
-        # Check if default tenant exists
-        default_tenant = db(db.tenants.slug == "default").select().first()
-
-        if not default_tenant:
-            print("Creating default tenant...")
-            tenant_id = db.tenants.insert(
-                name="Default",
-                slug="default",
-                description="Default tenant for all users",
-                is_active=True,
-                max_users=0,  # Unlimited
-                max_repositories=0,  # Unlimited
-                max_teams=0,  # Unlimited
-                settings={},
-            )
-            db.commit()
-            print(f"Default tenant created with ID: {tenant_id}")
-
-            # Create default team for this tenant
-            team_id = db.teams.insert(
-                tenant_id=tenant_id,
-                name="Default",
-                slug="default",
-                description="Default team for all tenant members",
-                is_active=True,
-                is_default=True,
-                settings={},
-            )
-            db.commit()
-            print(f"Default team created with ID: {team_id}")
-
-            # Migrate all existing users to default tenant/team
-            users = db(db.users.id > 0).select()
-            for user in users:
-                # Determine role based on existing user role
-                tenant_role = "admin" if user.role == "admin" else "viewer"
-                team_role = "admin" if user.role == "admin" else "viewer"
-
-                # Add user to default tenant
-                db.tenant_members.insert(
-                    tenant_id=tenant_id,
-                    user_id=user.id,
-                    role=tenant_role,
-                    is_active=True,
-                )
-
-                # Add user to default team
-                db.team_members.insert(
-                    team_id=team_id,
-                    user_id=user.id,
-                    role=team_role,
-                    is_active=True,
-                )
-
-                # Set default tenant for user
-                db(db.users.id == user.id).update(
-                    default_tenant_id=tenant_id,
-                    global_role=user.role,  # Copy role to global_role
-                )
-
-            db.commit()
-            print(f"Migrated {len(users)} existing users to default tenant/team")
-
-            # Migrate all existing repositories to default team
-            repos = db(db.repo_configs.id > 0).select()
-            for repo in repos:
-                db(db.repo_configs.id == repo.id).update(
-                    tenant_id=tenant_id,
-                    team_id=team_id,
-                )
-            db.commit()
-            print(f"Migrated {len(repos)} existing repositories to default team")
-
-            # Migrate all existing reviews to default tenant/team
-            reviews = db(db.reviews.id > 0).select()
-            for review in reviews:
-                db(db.reviews.id == review.id).update(
-                    tenant_id=tenant_id,
-                    team_id=team_id,
-                )
-            db.commit()
-            print(f"Migrated {len(reviews)} existing reviews to default tenant/team")
-
-            print("Default tenant migration completed successfully")
-        else:
-            print(f"Default tenant already exists (ID: {default_tenant.id})")
-
-    except Exception as e:
-        db.rollback()
-        error_str = str(e).lower()
-        if "undefined table" in error_str or "does not exist" in error_str or "no such table" in error_str:
-            print("Multi-tenancy tables not yet created, skipping default tenant initialization.")
-        else:
-            print(f"Error initializing default tenant: {e}")
-            raise
