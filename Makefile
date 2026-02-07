@@ -129,6 +129,58 @@ test-coverage: ## Testing - Generate coverage reports
 	@echo "  Python: coverage-python.xml, htmlcov-python/"
 	@echo "  Node.js: coverage/"
 
+# Alpha/Beta Test Suite
+test-alpha: ## Testing - Run all alpha tests (local Docker E2E)
+	@echo "$(BLUE)Running alpha test suite...$(RESET)"
+	@./tests/alpha/run-all.sh
+
+test-alpha-build: ## Testing - Run alpha build verification test
+	@./tests/alpha/01-build-test.sh
+
+test-alpha-runtime: ## Testing - Run alpha runtime verification test
+	@./tests/alpha/02-runtime-test.sh
+
+test-alpha-mock: ## Testing - Run alpha mock data integration test
+	@./tests/alpha/03-mock-data-test.sh
+
+test-alpha-pages: ## Testing - Run alpha page load test
+	@./tests/alpha/04-page-load-test.sh
+
+test-alpha-api: ## Testing - Run alpha API test
+	@./tests/alpha/05-api-test.sh
+
+test-alpha-cleanup: ## Testing - Clean up alpha test environment
+	@./tests/alpha/cleanup.sh
+
+test-beta: ## Testing - Run all beta tests (K8s E2E)
+	@echo "$(BLUE)Running beta test suite...$(RESET)"
+	@./tests/beta/run-all.sh
+
+test-beta-kustomize: ## Testing - Run beta Kustomize deployment test
+	@./tests/beta/01-kustomize-deploy-test.sh
+
+test-beta-kubectl: ## Testing - Run beta kubectl deployment test
+	@./tests/beta/02-kubectl-deploy-test.sh
+
+test-beta-helm: ## Testing - Run beta Helm deployment test
+	@./tests/beta/03-helm-deploy-test.sh
+
+test-beta-runtime: ## Testing - Run beta K8s runtime test
+	@./tests/beta/04-k8s-runtime-test.sh
+
+test-beta-api: ## Testing - Run beta K8s API test
+	@./tests/beta/05-k8s-api-test.sh
+
+test-beta-pages: ## Testing - Run beta K8s page load test
+	@./tests/beta/06-k8s-page-load-test.sh
+
+test-beta-cleanup: ## Testing - Clean up beta test environment
+	@./tests/beta/cleanup.sh
+
+mock-data: ## Testing - Populate mock data (3-4 items per feature)
+	@echo "$(BLUE)Populating mock data...$(RESET)"
+	@./tests/mock-data/populate.sh
+
 # Build Commands
 build: ## Build - Build all applications
 	@echo "$(BLUE)Building all applications...$(RESET)"
@@ -189,6 +241,12 @@ HELM_RELEASE_REDIS := darwin-redis
 	k8s-rollback-flask-dev helm-rollback-dev \
 	k8s-apply-netpol-dev k8s-apply-netpol-prod \
 	k8s-clean-dev k8s-clean-staging k8s-clean-prod
+
+# Beta Deployment
+deploy-beta: ## Kubernetes - Deploy to beta environment (registry + K8s)
+	@echo "$(BLUE)Deploying to beta environment...$(RESET)"
+	@./scripts/deploy-to-beta.sh
+	@echo "$(GREEN)Beta deployment complete!$(RESET)"
 
 # Namespace Management
 k8s-namespace-create: ## Kubernetes - Create all Kubernetes namespaces

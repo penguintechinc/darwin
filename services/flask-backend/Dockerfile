@@ -33,8 +33,8 @@ RUN pip install --no-cache-dir \
     pylint==3.3.3 \
     pyright==1.1.390 \
     ruff==0.9.2 \
-    pip-licenses==5.0.0 \
-    scancode-toolkit==32.3.0
+    pip-licenses==5.0.0
+    # scancode-toolkit==32.3.0  # TODO: Requires ICU library and pkg-config
 
 # Production stage with ALL linters and scanners
 FROM python:3.13-slim AS runtime
@@ -51,7 +51,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     lsb-release \
     apt-transport-https \
-    software-properties-common \
     unzip \
     tar \
     && rm -rf /var/lib/apt/lists/*
@@ -72,12 +71,12 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
 
-# Install GitLab CLI (glab)
-RUN curl -sSL https://gitlab.com/gitlab-org/cli/-/releases/download/v1.47.0/glab_1.47.0_Linux_x86_64.tar.gz | \
-    tar -xz -C /tmp && \
-    mv /tmp/bin/glab /usr/local/bin/ && \
-    chmod +x /usr/local/bin/glab && \
-    rm -rf /tmp/bin
+# Install GitLab CLI (glab) - TODO: Fix download URL (currently 404)
+# RUN curl -sSL https://gitlab.com/gitlab-org/cli/-/releases/download/v1.47.0/glab_1.47.0_Linux_x86_64.tar.gz | \
+#     tar -xz -C /tmp && \
+#     mv /tmp/bin/glab /usr/local/bin/ && \
+#     chmod +x /usr/local/bin/glab && \
+#     rm -rf /tmp/bin
 
 # ============================================================================
 # Node.js and JavaScript/TypeScript Linters
@@ -140,8 +139,8 @@ RUN curl -sSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.11/t
     -o /usr/local/bin/tfsec && \
     chmod +x /usr/local/bin/tfsec
 
-# Install checkov (IaC security scanner - Python-based)
-RUN pip3 install --no-cache-dir checkov==3.2.319
+# Install checkov (IaC security scanner - Python-based) - TODO: Requires Rust compiler
+# RUN pip3 install --no-cache-dir checkov==3.2.319
 
 # ============================================================================
 # Ansible Linters
@@ -217,15 +216,15 @@ RUN curl -sSL https://github.com/CycloneDX/cyclonedx-cli/releases/download/v0.27
 # Advanced Static Analyzers
 # ============================================================================
 
-# Install Infer (Facebook's static analyzer for Java, C, C++, Objective-C)
-RUN apt-get update && \
-    apt-get install -y opam m4 && \
-    rm -rf /var/lib/apt/lists/* && \
-    curl -sSL https://github.com/facebook/infer/releases/download/v1.2.0/infer-linux-x64-v1.2.0.tar.xz \
-    -o /tmp/infer.tar.xz && \
-    tar -C /opt -xf /tmp/infer.tar.xz && \
-    ln -s /opt/infer-linux-x64-v1.2.0/bin/infer /usr/local/bin/infer && \
-    rm /tmp/infer.tar.xz
+# Install Infer (Facebook's static analyzer for Java, C, C++, Objective-C) - TODO: Fix tar extraction error
+# RUN apt-get update && \
+#     apt-get install -y opam m4 && \
+#     rm -rf /var/lib/apt/lists/* && \
+#     curl -sSL https://github.com/facebook/infer/releases/download/v1.2.0/infer-linux-x64-v1.2.0.tar.xz \
+#     -o /tmp/infer.tar.xz && \
+#     tar -C /opt -xf /tmp/infer.tar.xz && \
+#     ln -s /opt/infer-linux-x64-v1.2.0/bin/infer /usr/local/bin/infer && \
+#     rm /tmp/infer.tar.xz
 
 # Install Cppcheck (C/C++ static analyzer)
 RUN apt-get update && \
@@ -237,22 +236,22 @@ RUN apt-get update && \
     apt-get install -y clang clang-tools && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Spotbugs (Java static analyzer) - requires Java
-RUN apt-get update && \
-    apt-get install -y openjdk-17-jdk-headless && \
-    rm -rf /var/lib/apt/lists/* && \
-    curl -sSL https://github.com/spotbugs/spotbugs/releases/download/4.8.6/spotbugs-4.8.6.tgz \
-    -o /tmp/spotbugs.tgz && \
-    tar -C /opt -xzf /tmp/spotbugs.tgz && \
-    ln -s /opt/spotbugs-4.8.6/bin/spotbugs /usr/local/bin/spotbugs && \
-    rm /tmp/spotbugs.tgz
+# Install Spotbugs (Java static analyzer) - requires Java - TODO: openjdk-17 not available in slim image
+# RUN apt-get update && \
+#     apt-get install -y openjdk-17-jdk-headless && \
+#     rm -rf /var/lib/apt/lists/* && \
+#     curl -sSL https://github.com/spotbugs/spotbugs/releases/download/4.8.6/spotbugs-4.8.6.tgz \
+#     -o /tmp/spotbugs.tgz && \
+#     tar -C /opt -xzf /tmp/spotbugs.tgz && \
+#     ln -s /opt/spotbugs-4.8.6/bin/spotbugs /usr/local/bin/spotbugs && \
+#     rm /tmp/spotbugs.tgz
 
-# Install PMD (Java source code analyzer)
-RUN curl -sSL https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.8.0/pmd-dist-7.8.0-bin.zip \
-    -o /tmp/pmd.zip && \
-    unzip -q /tmp/pmd.zip -d /opt && \
-    ln -s /opt/pmd-bin-7.8.0/bin/pmd /usr/local/bin/pmd && \
-    rm /tmp/pmd.zip
+# Install PMD (Java source code analyzer) - TODO: Requires Java
+# RUN curl -sSL https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.8.0/pmd-dist-7.8.0-bin.zip \
+#     -o /tmp/pmd.zip && \
+#     unzip -q /tmp/pmd.zip -d /opt && \
+#     ln -s /opt/pmd-bin-7.8.0/bin/pmd /usr/local/bin/pmd && \
+#     rm /tmp/pmd.zip
 
 # Install SonarScanner CLI (multi-language static analysis)
 RUN curl -sSL https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.2.1.4610-linux-x64.zip \
@@ -280,22 +279,22 @@ RUN npm install -g markdownlint-cli@0.43.0
 RUN npm install -g jsonlint@1.6.3
 
 # ============================================================================
-# Ruby and PHP linters (for comprehensive coverage)
+# Ruby and PHP linters (for comprehensive coverage) - TODO: Build failures
 # ============================================================================
 
-# Install Ruby and rubocop
-RUN apt-get update && \
-    apt-get install -y ruby-full && \
-    gem install rubocop -v 1.69.2 && \
-    rm -rf /var/lib/apt/lists/*
+# Install Ruby and rubocop - TODO: Prism gem compilation failure
+# RUN apt-get update && \
+#     apt-get install -y ruby-full && \
+#     gem install rubocop -v 1.69.2 && \
+#     rm -rf /var/lib/apt/lists/*
 
-# Install PHP and phpcs
-RUN apt-get update && \
-    apt-get install -y php-cli php-xml composer && \
-    rm -rf /var/lib/apt/lists/*
+# Install PHP and phpcs - TODO: Not needed for Python/Flask backend
+# RUN apt-get update && \
+#     apt-get install -y php-cli php-xml composer && \
+#     rm -rf /var/lib/apt/lists/*
 
-RUN composer global require "squizlabs/php_codesniffer=*" && \
-    ln -s /root/.composer/vendor/bin/phpcs /usr/local/bin/phpcs
+# RUN composer global require "squizlabs/php_codesniffer=*" && \
+#     ln -s /root/.composer/vendor/bin/phpcs /usr/local/bin/phpcs
 
 # ============================================================================
 # Copy Python virtual environment from builder

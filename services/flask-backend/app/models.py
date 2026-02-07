@@ -746,6 +746,13 @@ def get_credentials(git_url_pattern: Optional[str] = None) -> list[dict]:
     return [c.as_dict() for c in credentials]
 
 
+def get_credential_by_id(cred_id: int) -> Optional[dict]:
+    """Get a git credential by its ID."""
+    db = get_db()
+    credential = db(db.git_credentials.id == cred_id).select().first()
+    return credential.as_dict() if credential else None
+
+
 def delete_credential(cred_id: int) -> bool:
     """Delete a git credential by ID."""
     db = get_db()

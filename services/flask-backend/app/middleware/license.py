@@ -10,10 +10,7 @@ from typing import Callable, Optional, Any, Dict
 
 from flask import current_app, g, jsonify
 
-import sys
-sys.path.insert(0, '/home/penguin/code/darwin/shared')
-
-from licensing.python_client import (
+from penguin_licensing.python_client import (
     PenguinTechLicenseClient,
     FeatureNotAvailableError as LicenseFeatureError,
     LicenseValidationError,
