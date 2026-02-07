@@ -31,6 +31,7 @@ FEATURE_OLLAMA = "OLLAMA"
 FEATURE_CUSTOM_RULES = "CUSTOM_RULES"
 FEATURE_UNLIMITED_REVIEWS = "UNLIMITED_REVIEWS"
 FEATURE_UNLIMITED_REPOS = "UNLIMITED_REPOS"
+FEATURE_ISSUE_AUTOPILOT = "ISSUE_AUTOPILOT"
 
 # Feature flag for development mode (all features available when disabled)
 RELEASE_MODE = False
@@ -367,6 +368,11 @@ def is_unlimited_reviews_available() -> bool:
 def is_unlimited_repos_available() -> bool:
     """Check if UNLIMITED_REPOS feature is available."""
     return check_feature_available(FEATURE_UNLIMITED_REPOS)
+
+
+def is_issue_autopilot_available() -> bool:
+    """Check if ISSUE_AUTOPILOT feature is available."""
+    return check_feature_available(FEATURE_ISSUE_AUTOPILOT)
 
 
 def get_repo_limit() -> Optional[int]:

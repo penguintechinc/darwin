@@ -353,6 +353,78 @@ gh pr create --title "Brief feature description" \
 
 ---
 
+## Issue Plan Automation
+
+Darwin can automatically generate AI-powered implementation plans when issues are created on GitHub or GitLab.
+
+### Configuration
+
+Enable issue plan automation in your repository configuration:
+
+```json
+{
+  "auto_plan_on_issue": true,
+  "issue_plan_provider": "claude",
+  "issue_plan_model": "claude-sonnet-4.5",
+  "issue_plan_daily_limit": 10,
+  "issue_plan_cost_limit_usd": 5
+}
+```
+
+**Configuration Options:**
+
+- `auto_plan_on_issue` (boolean): Enable/disable automatic plan generation
+- `issue_plan_provider` (string): AI provider to use (claude, openai, ollama)
+- `issue_plan_model` (string, optional): Specific model override
+- `issue_plan_daily_limit` (integer, optional): Maximum plans per day (null = unlimited)
+- `issue_plan_cost_limit_usd` (float, optional): Monthly cost limit in USD (null = unlimited)
+
+### Webhook Setup
+
+**GitHub:**
+- URL: `https://your-darwin.com/api/v1/webhooks/github`
+- Events: Enable "Issues"
+- Content type: application/json
+- Secret: (from repo_config.webhook_secret)
+
+**GitLab:**
+- URL: `https://your-darwin.com/api/v1/webhooks/gitlab`
+- Events: Enable "Issues events"
+- Content type: application/json
+- Secret Token: (from repo_config.webhook_secret)
+
+### API Endpoints
+
+**List Issue Plans:**
+```bash
+GET /api/v1/issue-plans?repository=owner/repo&status=completed
+```
+
+**Get Plan Details:**
+```bash
+GET /api/v1/issue-plans/123
+```
+
+**Manually Regenerate Plan:**
+```bash
+POST /api/v1/issue-plans/123/regenerate
+```
+
+### Rate Limiting
+
+Optional rate limits can be configured per repository:
+
+- **Daily Limit**: Maximum number of plans generated per day
+- **Cost Limit**: Monthly cost limit in USD based on token usage
+
+When limits are exceeded, new issue plans will not be created until the limit resets.
+
+### License Requirements
+
+Issue plan automation requires the `ISSUE_AUTOPILOT` license feature. In development mode (RELEASE_MODE=false), the feature is available without license validation.
+
+---
+
 ## Common Tasks
 
 ### Adding a New Python Dependency

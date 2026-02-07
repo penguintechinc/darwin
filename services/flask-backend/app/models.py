@@ -14,14 +14,19 @@ VALID_ROLES = ["admin", "maintainer", "viewer"]
 
 
 def init_db(app: Flask) -> DAL:
-    """Initialize database connection and define tables."""
+    """Initialize database connection for runtime operations.
+
+    NOTE: Tables should already exist from SQLAlchemy/Alembic migrations.
+    PyDAL is used for runtime queries only, NOT for schema creation.
+    """
     db_uri = Config.get_db_uri()
 
     db = DAL(
         db_uri,
         pool_size=Config.DB_POOL_SIZE,
-        migrate=True,
-        check_reserved=["all"],
+        migrate=False,  # Disable migrations - use Alembic instead
+        fake_migrate=True,  # Read existing schema without creating tables
+        check_reserved=[],  # SQLAlchemy handles reserved keywords with quoting
         lazy_tables=False,
     )
 
@@ -128,6 +133,11 @@ def init_db(app: Flask) -> DAL:
         Field("ignored_paths", "json"),
         Field("custom_rules", "json"),
         Field("webhook_secret", "string", length=255),
+        Field("auto_plan_on_issue", "boolean", default=False),
+        Field("issue_plan_provider", "string", length=64),
+        Field("issue_plan_model", "string", length=128),
+        Field("issue_plan_daily_limit", "integer"),
+        Field("issue_plan_cost_limit_usd", "double"),
         Field("created_at", "datetime", default=datetime.utcnow),
         Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
         format="%(platform)s/%(repository)s",
@@ -233,6 +243,31 @@ def init_db(app: Flask) -> DAL:
         Field("created_at", "datetime", default=datetime.utcnow),
         Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
         format="%(config_key)s",
+    )
+
+    # Define issue_plans table - AI-generated implementation plans for issues
+    db.define_table(
+        "issue_plans",
+        Field("external_id", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
+        Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
+        Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
+        Field("issue_number", "integer"),
+        Field("issue_url", "string", length=512),
+        Field("issue_title", "string", length=512),
+        Field("issue_body", "text"),
+        Field("plan_content", "text"),
+        Field("plan_steps", "json"),
+        Field("ai_provider", "string", length=64),
+        Field("ai_model", "string", length=128),
+        Field("status", "string", default="queued", requires=IS_IN_SET(
+            ["queued", "in_progress", "completed", "failed"]
+        )),
+        Field("error_message", "text"),
+        Field("comment_posted", "boolean", default=False),
+        Field("platform_comment_id", "string", length=128),
+        Field("token_usage", "json"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
     )
 
     # Commit table definitions
@@ -878,3 +913,134 @@ def check_repo_limit(has_professional_license: bool) -> tuple[bool, int, int]:
     can_add = current_count < free_limit
 
     return can_add, current_count, free_limit
+
+
+# ===========================
+# Issue Plans Helper Functions
+# ===========================
+
+
+def create_issue_plan(external_id: str, platform: str, repository: str,
+                     issue_number: int, issue_title: str, issue_body: str,
+                     ai_provider: str, issue_url: Optional[str] = None,
+                     ai_model: Optional[str] = None) -> dict:
+    """Create a new issue plan request."""
+    db = get_db()
+    plan_id = db.issue_plans.insert(
+        external_id=external_id,
+        platform=platform,
+        repository=repository,
+        issue_number=issue_number,
+        issue_url=issue_url,
+        issue_title=issue_title,
+        issue_body=issue_body,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        status="queued",
+    )
+    db.commit()
+    return get_issue_plan_by_id(plan_id)
+
+
+def get_issue_plan_by_id(plan_id: int) -> Optional[dict]:
+    """Get issue plan by ID."""
+    db = get_db()
+    plan = db(db.issue_plans.id == plan_id).select().first()
+    return plan.as_dict() if plan else None
+
+
+def get_issue_plan_by_external_id(external_id: str) -> Optional[dict]:
+    """Get issue plan by external ID."""
+    db = get_db()
+    plan = db(db.issue_plans.external_id == external_id).select().first()
+    return plan.as_dict() if plan else None
+
+
+def update_issue_plan_status(plan_id: int, status: str,
+                             plan_content: Optional[str] = None,
+                             plan_steps: Optional[list] = None,
+                             error_message: Optional[str] = None,
+                             comment_posted: Optional[bool] = None,
+                             platform_comment_id: Optional[str] = None,
+                             token_usage: Optional[dict] = None) -> Optional[dict]:
+    """Update issue plan status and content."""
+    db = get_db()
+    update_data = {"status": status}
+
+    if plan_content is not None:
+        update_data["plan_content"] = plan_content
+    if plan_steps is not None:
+        update_data["plan_steps"] = plan_steps
+    if error_message is not None:
+        update_data["error_message"] = error_message
+    if comment_posted is not None:
+        update_data["comment_posted"] = comment_posted
+    if platform_comment_id is not None:
+        update_data["platform_comment_id"] = platform_comment_id
+    if token_usage is not None:
+        update_data["token_usage"] = token_usage
+
+    db(db.issue_plans.id == plan_id).update(**update_data)
+    db.commit()
+    return get_issue_plan_by_id(plan_id)
+
+
+def list_issue_plans(platform: Optional[str] = None,
+                    repository: Optional[str] = None,
+                    status: Optional[str] = None,
+                    page: int = 1,
+                    per_page: int = 20) -> tuple[list[dict], int]:
+    """List issue plans with optional filtering and pagination."""
+    db = get_db()
+    offset = (page - 1) * per_page
+
+    # Build query
+    query = db.issue_plans.id > 0
+    if platform:
+        query &= db.issue_plans.platform == platform
+    if repository:
+        query &= db.issue_plans.repository == repository
+    if status:
+        query &= db.issue_plans.status == status
+
+    plans = db(query).select(
+        orderby=~db.issue_plans.created_at,
+        limitby=(offset, offset + per_page),
+    )
+    total = db(query).count()
+
+    return [p.as_dict() for p in plans], total
+
+
+def count_issue_plans_today(repository: str) -> int:
+    """Count issue plans created today for a repository."""
+    db = get_db()
+
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    count = db(
+        (db.issue_plans.repository == repository) &
+        (db.issue_plans.created_at >= today_start)
+    ).count()
+
+    return count
+
+
+def calculate_monthly_cost(repository: str) -> float:
+    """Calculate total token cost for the current month for a repository."""
+    db = get_db()
+
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    plans = db(
+        (db.issue_plans.repository == repository) &
+        (db.issue_plans.created_at >= month_start) &
+        (db.issue_plans.token_usage != None)
+    ).select()
+
+    total_cost = 0.0
+    for plan in plans:
+        if plan.token_usage and isinstance(plan.token_usage, dict):
+            total_cost += plan.token_usage.get("cost_estimate", 0.0)
+
+    return total_cost

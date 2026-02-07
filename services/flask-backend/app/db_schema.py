@@ -63,17 +63,65 @@ def check_admin_user_exists(engine):
 
 
 def init_database_schema(app=None):
-    """Initialize database schema using SQLAlchemy.
+    """Initialize database schema using Alembic migrations.
 
-    This function:
-    1. Checks if required tables exist
-    2. Creates missing tables with proper schema
-    3. Ensures admin user exists
+    This function runs pending Alembic migrations on startup to ensure
+    the database schema is up-to-date. If Alembic is not available (e.g.,
+    in development), it falls back to create_all() using the table definitions.
 
     Args:
         app: Flask app instance (optional, for logging context)
     """
-    logger.info("Starting SQLAlchemy database schema initialization")
+    logger.info("Starting database schema initialization with Alembic migrations")
+
+    try:
+        # Try to use Alembic migrations
+        from alembic.config import Config as AlembicConfig
+        from alembic import command
+        import os
+
+        # Get the directory of this file (app/)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Go up to flask-backend directory
+        backend_dir = os.path.dirname(current_dir)
+        alembic_ini = os.path.join(backend_dir, 'alembic.ini')
+
+        if os.path.exists(alembic_ini):
+            logger.info(f"Found alembic.ini at {alembic_ini}")
+            alembic_cfg = AlembicConfig(alembic_ini)
+            # Run migrations to head
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Database migrations completed successfully")
+            return get_sqlalchemy_engine()
+        else:
+            logger.warning(
+                f"alembic.ini not found at {alembic_ini}, "
+                "falling back to create_all()"
+            )
+            return _create_all_fallback()
+
+    except ImportError as e:
+        logger.warning(
+            f"Alembic not available ({e}), falling back to create_all()"
+        )
+        return _create_all_fallback()
+    except Exception as e:
+        logger.error(f"Database migration failed: {e}")
+        if app and app.config.get("RELEASE_MODE", False):
+            # In production, fail if migrations don't work
+            raise
+        else:
+            # In development, fall back to create_all
+            logger.warning("Continuing with create_all() fallback due to migration error")
+            return _create_all_fallback()
+
+
+def _create_all_fallback():
+    """Fallback function using create_all() when Alembic is unavailable.
+
+    This maintains backward compatibility for development environments.
+    """
+    logger.info("Using SQLAlchemy create_all() for schema initialization")
 
     engine = get_sqlalchemy_engine()
     metadata = MetaData()
@@ -219,6 +267,12 @@ def init_database_schema(app=None):
         # Advanced settings
         Column('max_review_age_hours', Integer, default=168),  # 7 days
         Column('skip_patterns', JSON),
+        # Issue plan automation
+        Column('auto_plan_on_issue', Boolean, default=False),
+        Column('issue_plan_provider', String(64)),
+        Column('issue_plan_model', String(128)),
+        Column('issue_plan_daily_limit', Integer),
+        Column('issue_plan_cost_limit_usd', Integer),
         Column('created_at', DateTime(timezone=True), server_default=func.now()),
         Column('updated_at', DateTime(timezone=True), server_default=func.now(), onupdate=func.now()),
     )
@@ -296,6 +350,29 @@ def init_database_schema(app=None):
         Column('created_at', DateTime(timezone=True), server_default=func.now()),
     )
 
+    issue_plans = Table(
+        'issue_plans', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('external_id', String(128), unique=True, nullable=False),
+        Column('platform', String(64), nullable=False),
+        Column('repository', String(255), nullable=False),
+        Column('issue_number', Integer, nullable=False),
+        Column('issue_url', String(512)),
+        Column('issue_title', String(512)),
+        Column('issue_body', Text),
+        Column('plan_content', Text),
+        Column('plan_steps', JSON),
+        Column('ai_provider', String(64)),
+        Column('ai_model', String(128)),
+        Column('status', String(50), default='queued'),
+        Column('error_message', Text),
+        Column('comment_posted', Boolean, default=False),
+        Column('platform_comment_id', String(128)),
+        Column('token_usage', JSON),
+        Column('created_at', DateTime(timezone=True), server_default=func.now()),
+        Column('updated_at', DateTime(timezone=True), server_default=func.now(), onupdate=func.now()),
+    )
+
     ai_model_config = Table(
         'ai_model_config', metadata,
         Column('id', Integer, primary_key=True),
@@ -317,7 +394,7 @@ def init_database_schema(app=None):
     )
 
     # Create all tables
-    logger.info("Creating database tables with SQLAlchemy...")
+    logger.info("Creating database tables with SQLAlchemy create_all()...")
     metadata.create_all(engine)
     logger.info("Database schema initialization complete")
 

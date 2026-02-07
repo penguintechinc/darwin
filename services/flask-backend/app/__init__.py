@@ -7,6 +7,7 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 from .config import Config
 from .models import init_db, get_db
+from .db_schema import init_database_schema
 
 
 def create_app(config_class: type = Config) -> Flask:
@@ -25,6 +26,9 @@ def create_app(config_class: type = Config) -> Flask:
 
     # Initialize database
     with app.app_context():
+        # SQLAlchemy creates schema and handles migrations
+        init_database_schema(app)
+        # PyDAL for runtime operations only
         init_db(app)
 
     # Register blueprints - existing
@@ -46,6 +50,7 @@ def create_app(config_class: type = Config) -> Flask:
     from .api.v1.providers import providers_bp
     from .api.v1.analytics import analytics_bp
     from .api.v1.licenses import licenses_bp
+    from .api.v1.issue_plans import issue_plans_bp
 
     app.register_blueprint(reviews_bp, url_prefix="/api/v1/reviews")
     app.register_blueprint(webhooks_bp, url_prefix="/api/v1/webhooks")
@@ -56,6 +61,7 @@ def create_app(config_class: type = Config) -> Flask:
     app.register_blueprint(providers_bp, url_prefix="/api/v1/providers")
     app.register_blueprint(analytics_bp, url_prefix="/api/v1/analytics")
     app.register_blueprint(licenses_bp, url_prefix="/api/v1/licenses")
+    app.register_blueprint(issue_plans_bp)
 
     # Health check endpoint
     @app.route("/healthz")
