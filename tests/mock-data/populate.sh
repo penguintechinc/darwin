@@ -50,8 +50,11 @@ for i in {1..3}; do
     fi
 done
 
-# Create mock reviews (3-4 per user)
+# Create mock reviews (3 per user)
 log_info "Creating mock reviews..."
+
+PLATFORMS=("github" "gitlab" "github")
+REVIEW_TYPES=("differential" "whole" "differential")
 
 for user_num in {1..3}; do
     # Get user token
@@ -62,26 +65,29 @@ for user_num in {1..3}; do
         continue
     fi
 
-    # Create 3-4 reviews
+    # Create 3 reviews
     for review_num in {1..3}; do
         log_info "Creating review $review_num for user$user_num..."
 
+        PLATFORM_IDX=$(( (review_num - 1) % 3 ))
         REVIEW_RESPONSE=$(curl -s -X POST "$FLASK_URL/api/v1/reviews" \
             -H "Authorization: Bearer $USER_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{
-                \"title\": \"PR Review $review_num by user$user_num\",
-                \"description\": \"This is a mock PR review for testing purposes\",
+                \"external_id\": \"mock-user${user_num}-review${review_num}\",
+                \"platform\": \"${PLATFORMS[$PLATFORM_IDX]}\",
                 \"repository\": \"penguintechinc/darwin\",
-                \"pr_number\": $((review_num + user_num * 10)),
-                \"status\": \"pending\",
-                \"priority\": \"medium\"
+                \"review_type\": \"${REVIEW_TYPES[$PLATFORM_IDX]}\",
+                \"categories\": [\"security\", \"best_practices\"],
+                \"ai_provider\": \"claude\",
+                \"pull_request_id\": $((review_num + user_num * 10)),
+                \"pull_request_url\": \"https://github.com/penguintechinc/darwin/pull/$((review_num + user_num * 10))\"
             }")
 
         if echo "$REVIEW_RESPONSE" | jq -e '.id' > /dev/null 2>&1; then
             log_success "Review $review_num created for user$user_num"
         else
-            log_warning "Review creation may have failed"
+            log_warning "Review creation may have failed: $REVIEW_RESPONSE"
         fi
     done
 done

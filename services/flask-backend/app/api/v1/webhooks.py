@@ -11,6 +11,7 @@ from ...models import (
     create_issue_plan,
     count_issue_plans_today,
     calculate_monthly_cost,
+    resolve_platform_user,
 )
 from ...middleware.license import check_feature_available, FEATURE_ISSUE_AUTOPILOT
 
@@ -85,6 +86,20 @@ def github_webhook():
     if not repo_config.get("enabled"):
         return jsonify({"message": "Repository disabled"}), 200
 
+    # Resolve sender to Darwin user (if platform identity mapping exists)
+    sender = data.get("sender", {})
+    sender_login = sender.get("login", "")
+    triggered_by = None
+    if sender_login:
+        darwin_user = resolve_platform_user("github", sender_login)
+        if darwin_user:
+            triggered_by = darwin_user.get("id")
+
+    # Extract tenant/team context from repo config
+    webhook_tenant_id = repo_config.get("tenant_id")
+    webhook_team_id = repo_config.get("team_id")
+    webhook_repo_id = repo_config.get("id")
+
     # Process pull request events
     if event_type == "pull_request":
         pr_data = data.get("pull_request", {})
@@ -103,6 +118,10 @@ def github_webhook():
                 review_type="differential",
                 categories=repo_config.get("default_categories", ["security", "best_practices"]),
                 ai_provider=repo_config.get("default_ai_provider", "claude"),
+                triggered_by=triggered_by,
+                tenant_id=webhook_tenant_id,
+                team_id=webhook_team_id,
+                repo_id=webhook_repo_id,
             )
             return jsonify({"message": "Review created", "review_id": review.get("id")}), 202
 
@@ -119,6 +138,10 @@ def github_webhook():
                 review_type="differential",
                 categories=repo_config.get("default_categories", ["security", "best_practices"]),
                 ai_provider=repo_config.get("default_ai_provider", "claude"),
+                triggered_by=triggered_by,
+                tenant_id=webhook_tenant_id,
+                team_id=webhook_team_id,
+                repo_id=webhook_repo_id,
             )
             return jsonify({"message": "Review created", "review_id": review.get("id")}), 202
 
@@ -202,6 +225,20 @@ def gitlab_webhook():
     if not repo_config.get("enabled"):
         return jsonify({"message": "Repository disabled"}), 200
 
+    # Resolve sender to Darwin user (if platform identity mapping exists)
+    gl_user = data.get("user", {})
+    gl_username = gl_user.get("username", "")
+    triggered_by = None
+    if gl_username:
+        darwin_user = resolve_platform_user("gitlab", gl_username)
+        if darwin_user:
+            triggered_by = darwin_user.get("id")
+
+    # Extract tenant/team context from repo config
+    webhook_tenant_id = repo_config.get("tenant_id")
+    webhook_team_id = repo_config.get("team_id")
+    webhook_repo_id = repo_config.get("id")
+
     # Process merge request events
     if event_type == "Merge Request Hook":
         mr_data = data.get("object_attributes", {})
@@ -220,6 +257,10 @@ def gitlab_webhook():
                 review_type="differential",
                 categories=repo_config.get("default_categories", ["security", "best_practices"]),
                 ai_provider=repo_config.get("default_ai_provider", "claude"),
+                triggered_by=triggered_by,
+                tenant_id=webhook_tenant_id,
+                team_id=webhook_team_id,
+                repo_id=webhook_repo_id,
             )
             return jsonify({"message": "Review created", "review_id": review.get("id")}), 202
 
@@ -236,6 +277,10 @@ def gitlab_webhook():
                 review_type="differential",
                 categories=repo_config.get("default_categories", ["security", "best_practices"]),
                 ai_provider=repo_config.get("default_ai_provider", "claude"),
+                triggered_by=triggered_by,
+                tenant_id=webhook_tenant_id,
+                team_id=webhook_team_id,
+                repo_id=webhook_repo_id,
             )
             return jsonify({"message": "Review created", "review_id": review.get("id")}), 202
 

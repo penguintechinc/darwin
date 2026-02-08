@@ -51,6 +51,7 @@ def create_app(config_class: type = Config) -> Flask:
     from .api.v1.analytics import analytics_bp
     from .api.v1.licenses import licenses_bp
     from .api.v1.issue_plans import issue_plans_bp
+    from .api.v1.platform_identities import platform_identities_bp
 
     app.register_blueprint(reviews_bp, url_prefix="/api/v1/reviews")
     app.register_blueprint(webhooks_bp, url_prefix="/api/v1/webhooks")
@@ -62,6 +63,7 @@ def create_app(config_class: type = Config) -> Flask:
     app.register_blueprint(analytics_bp, url_prefix="/api/v1/analytics")
     app.register_blueprint(licenses_bp, url_prefix="/api/v1/licenses")
     app.register_blueprint(issue_plans_bp)
+    app.register_blueprint(platform_identities_bp)
 
     # Health check endpoint
     @app.route("/healthz")

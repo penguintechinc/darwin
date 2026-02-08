@@ -5,7 +5,7 @@ PyDAL is used only for runtime operations, not schema management.
 """
 
 import logging
-from sqlalchemy import create_engine, text, MetaData, Table, Column
+from sqlalchemy import create_engine, text, MetaData, Table, Column, UniqueConstraint
 from sqlalchemy import Integer, String, Text, Boolean, DateTime, JSON, ForeignKey
 from sqlalchemy.sql import func
 from .config import Config
@@ -334,6 +334,20 @@ def _create_all_fallback():
         Column('personal_token_id', Integer, ForeignKey('git_credentials.id', ondelete='SET NULL')),
         Column('created_at', DateTime(timezone=True), server_default=func.now()),
         Column('updated_at', DateTime(timezone=True), server_default=func.now(), onupdate=func.now()),
+    )
+
+    platform_identities = Table(
+        'platform_identities', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('user_id', Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
+        Column('platform', String(64), nullable=False),
+        Column('platform_username', String(255), nullable=False),
+        Column('platform_user_id', String(128)),
+        Column('platform_avatar_url', String(512)),
+        Column('is_verified', Boolean, default=False),
+        Column('created_at', DateTime(timezone=True), server_default=func.now()),
+        Column('updated_at', DateTime(timezone=True), server_default=func.now(), onupdate=func.now()),
+        UniqueConstraint('platform', 'platform_username', name='uq_platform_identity'),
     )
 
     provider_usage = Table(

@@ -53,18 +53,38 @@ else
     save_test_result "verify-reviews" "WARN"
 fi
 
-# Test 4: Verify data relationships
-log_info "Test 4/4: Verifying data relationships..."
-ORPHAN_REVIEWS=$(docker exec project-template-postgres psql -U app_user -d app_db -t -c \
-    "SELECT COUNT(*) FROM reviews r LEFT JOIN users u ON r.user_id = u.id WHERE u.id IS NULL;" 2>/dev/null | tr -d ' ')
+# Test 4: Verify data relationships (tenant membership integrity)
+log_info "Test 4/5: Verifying data relationships..."
+ORPHAN_MEMBERS=$(docker exec project-template-postgres psql -U app_user -d app_db -t -c \
+    "SELECT COUNT(*) FROM tenant_members tm LEFT JOIN users u ON tm.user_id = u.id WHERE u.id IS NULL;" 2>/dev/null | tr -d ' ')
 
-if [ "$ORPHAN_REVIEWS" = "0" ]; then
-    log_success "No orphaned reviews (all have valid user references)"
+if [ -z "$ORPHAN_MEMBERS" ] || [ "$ORPHAN_MEMBERS" = "0" ]; then
+    log_success "No orphaned tenant members (all have valid user references)"
     save_test_result "data-integrity" "PASS"
 else
-    log_error "Found $ORPHAN_REVIEWS orphaned reviews"
+    log_error "Found $ORPHAN_MEMBERS orphaned tenant members"
     save_test_result "data-integrity" "FAIL"
     exit 1
+fi
+
+# Test 5: Verify review-user association (triggered_by populated)
+log_info "Test 5/5: Verifying review-user associations..."
+REVIEWS_WITH_USER=$(docker exec project-template-postgres psql -U app_user -d app_db -t -c \
+    "SELECT COUNT(*) FROM reviews WHERE triggered_by IS NOT NULL;" 2>/dev/null | tr -d ' ')
+TOTAL_REVIEWS=$(docker exec project-template-postgres psql -U app_user -d app_db -t -c \
+    "SELECT COUNT(*) FROM reviews;" 2>/dev/null | tr -d ' ')
+
+if [ -n "$TOTAL_REVIEWS" ] && [ "$TOTAL_REVIEWS" -gt 0 ]; then
+    if [ -n "$REVIEWS_WITH_USER" ] && [ "$REVIEWS_WITH_USER" -gt 0 ]; then
+        log_success "Reviews with user association: $REVIEWS_WITH_USER/$TOTAL_REVIEWS"
+        save_test_result "review-user-assoc" "PASS" "$REVIEWS_WITH_USER/$TOTAL_REVIEWS reviews have triggered_by"
+    else
+        log_warning "No reviews have user associations (triggered_by is NULL for all)"
+        save_test_result "review-user-assoc" "WARN"
+    fi
+else
+    log_warning "No reviews to check for user associations"
+    save_test_result "review-user-assoc" "WARN"
 fi
 
 print_summary

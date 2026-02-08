@@ -30,6 +30,22 @@ def init_db(app: Flask) -> DAL:
         lazy_tables=False,
     )
 
+    # Define tenants table - Multi-tenancy support
+    db.define_table(
+        "tenants",
+        Field("name", "string", length=255, unique=True, requires=IS_NOT_EMPTY()),
+        Field("slug", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
+        Field("description", "text"),
+        Field("is_active", "boolean", default=True),
+        Field("max_users", "integer", default=0),
+        Field("max_repositories", "integer", default=0),
+        Field("max_teams", "integer", default=0),
+        Field("settings", "json", default={}),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(name)s",
+    )
+
     # Define users table
     db.define_table(
         "users",
@@ -43,7 +59,10 @@ def init_db(app: Flask) -> DAL:
             VALID_ROLES,
             error_message=f"Role must be one of: {', '.join(VALID_ROLES)}"
         )),
+        Field("global_role", "string", length=50, default="viewer"),
+        Field("default_tenant_id", "reference tenants"),
         Field("is_active", "boolean", default=True),
+        Field("email_confirmed", "boolean", default=False),
         Field("created_at", "datetime", default=datetime.utcnow),
         Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
     )
@@ -52,10 +71,91 @@ def init_db(app: Flask) -> DAL:
     db.define_table(
         "refresh_tokens",
         Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
-        Field("token_hash", "string", length=255, unique=True),
+        Field("token", "string", length=500, unique=True),
         Field("expires_at", "datetime"),
-        Field("revoked", "boolean", default=False),
         Field("created_at", "datetime", default=datetime.utcnow),
+    )
+
+    # Define teams table - Team-based access control
+    db.define_table(
+        "teams",
+        Field("tenant_id", "reference tenants", requires=IS_NOT_EMPTY()),
+        Field("name", "string", length=255, requires=IS_NOT_EMPTY()),
+        Field("slug", "string", length=128, requires=IS_NOT_EMPTY()),
+        Field("description", "text"),
+        Field("is_active", "boolean", default=True),
+        Field("is_default", "boolean", default=False),
+        Field("settings", "json", default={}),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(name)s",
+    )
+
+    # Define custom_roles table - RBAC with custom role definitions
+    db.define_table(
+        "custom_roles",
+        Field("tenant_id", "reference tenants"),
+        Field("team_id", "reference teams"),
+        Field("name", "string", length=128, requires=IS_NOT_EMPTY()),
+        Field("slug", "string", length=128, requires=IS_NOT_EMPTY()),
+        Field("description", "text"),
+        Field("role_level", "string", length=64),
+        Field("scopes", "json", requires=IS_NOT_EMPTY()),
+        Field("is_active", "boolean", default=True),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+        format="%(name)s",
+    )
+
+    # Define tenant_members table - Tenant membership and roles
+    db.define_table(
+        "tenant_members",
+        Field("tenant_id", "reference tenants", requires=IS_NOT_EMPTY()),
+        Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
+        Field("role", "string", length=50, default="viewer"),
+        Field("custom_role_id", "reference custom_roles"),
+        Field("scopes", "json", default=[]),
+        Field("is_active", "boolean", default=True),
+        Field("joined_at", "datetime", default=datetime.utcnow),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
+
+    # Define team_members table - Team membership and roles
+    db.define_table(
+        "team_members",
+        Field("team_id", "reference teams", requires=IS_NOT_EMPTY()),
+        Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
+        Field("role", "string", length=50, default="viewer"),
+        Field("custom_role_id", "reference custom_roles"),
+        Field("scopes", "json", default=[]),
+        Field("is_active", "boolean", default=True),
+        Field("joined_at", "datetime", default=datetime.utcnow),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
+    )
+
+    # Define scopes table - Permission scope definitions
+    db.define_table(
+        "scopes",
+        Field("permission_scope", "string", length=128, unique=True, requires=IS_NOT_EMPTY()),
+        Field("description", "text"),
+        Field("category", "string", length=64),
+        Field("scope_level", "string", length=64),
+        Field("created_at", "datetime", default=datetime.utcnow),
+    )
+
+    # Define platform_identities table - Map external platform users to Darwin users
+    db.define_table(
+        "platform_identities",
+        Field("user_id", "reference users", requires=IS_NOT_EMPTY()),
+        Field("platform", "string", length=64, requires=IS_IN_SET(["github", "gitlab"])),
+        Field("platform_username", "string", length=255, requires=IS_NOT_EMPTY()),
+        Field("platform_user_id", "string", length=128),
+        Field("platform_avatar_url", "string", length=512),
+        Field("is_verified", "boolean", default=False),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
     )
 
     # Define reviews table - Main review requests
@@ -64,6 +164,10 @@ def init_db(app: Flask) -> DAL:
         Field("external_id", "string", length=64, unique=True),
         Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
         Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
+        Field("triggered_by", "reference users"),
+        Field("tenant_id", "reference tenants"),
+        Field("team_id", "reference teams"),
+        Field("repo_id", "reference repo_configs"),
         Field("pull_request_id", "integer"),
         Field("pull_request_url", "string", length=512),
         Field("base_sha", "string", length=64),
@@ -122,6 +226,9 @@ def init_db(app: Flask) -> DAL:
     # Define repo_configs table - Per-repository configuration
     db.define_table(
         "repo_configs",
+        Field("tenant_id", "reference tenants"),
+        Field("team_id", "reference teams"),
+        Field("owner_id", "reference users"),
         Field("platform", "string", requires=IS_IN_SET(["github", "gitlab"])),
         Field("repository", "string", length=255, requires=IS_NOT_EMPTY()),
         Field("enabled", "boolean", default=True),
@@ -141,6 +248,19 @@ def init_db(app: Flask) -> DAL:
         Field("created_at", "datetime", default=datetime.utcnow),
         Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
         format="%(platform)s/%(repository)s",
+    )
+
+    # Define repository_members table - Repository-level access control
+    db.define_table(
+        "repository_members",
+        Field("repository_id", "reference repo_configs"),
+        Field("user_id", "reference users"),
+        Field("role", "string", length=50, default="viewer"),
+        Field("custom_role_id", "reference custom_roles"),
+        Field("scopes", "json", default=[]),
+        Field("personal_token_id", "reference git_credentials"),
+        Field("created_at", "datetime", default=datetime.utcnow),
+        Field("updated_at", "datetime", default=datetime.utcnow, update=datetime.utcnow),
     )
 
     # Define provider_usage table - AI token usage tracking
@@ -303,7 +423,8 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
 
 
 def create_user(email: str, password_hash: str, full_name: str = "",
-                role: str = "viewer") -> dict:
+                role: str = "viewer", global_role: str = "viewer",
+                default_tenant_id: Optional[int] = None) -> dict:
     """Create a new user."""
     db = get_db()
     user_id = db.users.insert(
@@ -311,6 +432,8 @@ def create_user(email: str, password_hash: str, full_name: str = "",
         password_hash=password_hash,
         full_name=full_name,
         role=role,
+        global_role=global_role,
+        default_tenant_id=default_tenant_id,
         is_active=True,
     )
     db.commit()
@@ -322,7 +445,8 @@ def update_user(user_id: int, **kwargs) -> Optional[dict]:
     db = get_db()
 
     # Filter allowed fields
-    allowed_fields = {"email", "password_hash", "full_name", "role", "is_active"}
+    allowed_fields = {"email", "password_hash", "full_name", "role", "global_role",
+                      "default_tenant_id", "is_active"}
     update_data = {k: v for k, v in kwargs.items() if k in allowed_fields}
 
     if not update_data:
@@ -356,11 +480,11 @@ def list_users(page: int = 1, per_page: int = 20) -> tuple[list[dict], int]:
 
 
 def store_refresh_token(user_id: int, token_hash: str, expires_at: datetime) -> int:
-    """Store a refresh token."""
+    """Store a refresh token hash."""
     db = get_db()
     token_id = db.refresh_tokens.insert(
         user_id=user_id,
-        token_hash=token_hash,
+        token=token_hash,
         expires_at=expires_at,
     )
     db.commit()
@@ -368,19 +492,18 @@ def store_refresh_token(user_id: int, token_hash: str, expires_at: datetime) -> 
 
 
 def revoke_refresh_token(token_hash: str) -> bool:
-    """Revoke a refresh token."""
+    """Revoke a refresh token by deleting it."""
     db = get_db()
-    updated = db(db.refresh_tokens.token_hash == token_hash).update(revoked=True)
+    deleted = db(db.refresh_tokens.token == token_hash).delete()
     db.commit()
-    return updated > 0
+    return deleted > 0
 
 
 def is_refresh_token_valid(token_hash: str) -> bool:
-    """Check if refresh token is valid (not revoked and not expired)."""
+    """Check if refresh token is valid (exists and not expired)."""
     db = get_db()
     token = db(
-        (db.refresh_tokens.token_hash == token_hash) &
-        (db.refresh_tokens.revoked == False) &
+        (db.refresh_tokens.token == token_hash) &
         (db.refresh_tokens.expires_at > datetime.utcnow())
     ).select().first()
     return token is not None
@@ -404,13 +527,21 @@ def create_review(external_id: str, platform: str, repository: str,
                   pull_request_id: Optional[int] = None,
                   pull_request_url: Optional[str] = None,
                   base_sha: Optional[str] = None,
-                  head_sha: Optional[str] = None) -> dict:
+                  head_sha: Optional[str] = None,
+                  triggered_by: Optional[int] = None,
+                  tenant_id: Optional[int] = None,
+                  team_id: Optional[int] = None,
+                  repo_id: Optional[int] = None) -> dict:
     """Create a new review request."""
     db = get_db()
     review_id = db.reviews.insert(
         external_id=external_id,
         platform=platform,
         repository=repository,
+        triggered_by=triggered_by,
+        tenant_id=tenant_id,
+        team_id=team_id,
+        repo_id=repo_id,
         pull_request_id=pull_request_id,
         pull_request_url=pull_request_url,
         base_sha=base_sha,
@@ -467,6 +598,7 @@ def update_review_status(review_id: int, status: str,
 def list_reviews(platform: Optional[str] = None,
                 repository: Optional[str] = None,
                 status: Optional[str] = None,
+                tenant_id: Optional[int] = None,
                 page: int = 1,
                 per_page: int = 20) -> tuple[list[dict], int]:
     """List reviews with optional filtering and pagination."""
@@ -481,6 +613,8 @@ def list_reviews(platform: Optional[str] = None,
         query &= db.reviews.repository == repository
     if status:
         query &= db.reviews.status == status
+    if tenant_id:
+        query &= db.reviews.tenant_id == tenant_id
 
     reviews = db(query).select(
         orderby=~db.reviews.created_at,
@@ -920,6 +1054,85 @@ def check_repo_limit(has_professional_license: bool) -> tuple[bool, int, int]:
     can_add = current_count < free_limit
 
     return can_add, current_count, free_limit
+
+
+# ===========================
+# Platform Identity Helper Functions
+# ===========================
+
+
+def resolve_platform_user(platform: str, username: str) -> Optional[dict]:
+    """Look up Darwin user by platform identity.
+
+    Returns the Darwin user dict if a mapping exists, otherwise None.
+    """
+    db = get_db()
+    identity = db(
+        (db.platform_identities.platform == platform) &
+        (db.platform_identities.platform_username == username)
+    ).select().first()
+
+    if not identity:
+        return None
+
+    return get_user_by_id(identity.user_id)
+
+
+def create_platform_identity(user_id: int, platform: str, username: str,
+                             platform_user_id: Optional[str] = None,
+                             avatar_url: Optional[str] = None) -> dict:
+    """Create a platform identity mapping."""
+    db = get_db()
+    identity_id = db.platform_identities.insert(
+        user_id=user_id,
+        platform=platform,
+        platform_username=username,
+        platform_user_id=platform_user_id,
+        platform_avatar_url=avatar_url,
+        is_verified=False,
+    )
+    db.commit()
+    identity = db(db.platform_identities.id == identity_id).select().first()
+    return identity.as_dict() if identity else None
+
+
+def get_platform_identities(user_id: int) -> list[dict]:
+    """List all platform identities for a user."""
+    db = get_db()
+    identities = db(db.platform_identities.user_id == user_id).select(
+        orderby=db.platform_identities.platform
+    )
+    return [i.as_dict() for i in identities]
+
+
+def get_platform_identity_by_id(identity_id: int) -> Optional[dict]:
+    """Get a platform identity by its ID."""
+    db = get_db()
+    identity = db(db.platform_identities.id == identity_id).select().first()
+    return identity.as_dict() if identity else None
+
+
+def delete_platform_identity(identity_id: int) -> bool:
+    """Remove a platform identity mapping."""
+    db = get_db()
+    deleted = db(db.platform_identities.id == identity_id).delete()
+    db.commit()
+    return deleted > 0
+
+
+def list_all_platform_identities(page: int = 1,
+                                 per_page: int = 20) -> tuple[list[dict], int]:
+    """List all platform identities with pagination (admin use)."""
+    db = get_db()
+    offset = (page - 1) * per_page
+
+    identities = db(db.platform_identities).select(
+        orderby=db.platform_identities.created_at,
+        limitby=(offset, offset + per_page),
+    )
+    total = db(db.platform_identities).count()
+
+    return [i.as_dict() for i in identities], total
 
 
 # ===========================
