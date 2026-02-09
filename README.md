@@ -5,18 +5,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Multi--arch-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-Limited%20AGPL3-blue.svg)](LICENSE.md)
 
-```
- ____  ___    ______  _   _  _  _
-|  _ \|  _ \  |  ____|| | | || \| |
-| | | | |_) | | |  __ | | | ||  . |
-| | | |  _ <  | | |_ | | | | | |\  |
-| |_| | |_) | | |__| | |_| | | | \ |
-|____/|____/  |______| \___/  |_| \_|
-
-AI-Powered Code Review & Issue Planning for GitHub & GitLab
-```
-
-# Darwin - Intelligent Code Review & Issue Planning
+# 🧬 Darwin - Intelligent Code Review & Issue Planning
 
 **Enterprise-Grade AI Code Review with GitHub/GitLab Integration**
 
