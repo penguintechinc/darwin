@@ -23,6 +23,7 @@ services:
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
+      - AI_ENABLED=${AI_ENABLED:-true}
     volumes:
       - ./services/flask-backend/app:/app/app:ro
     command: python -m flask run --host=0.0.0.0 --port=5000 --reload

@@ -24,10 +24,12 @@ export default function Users() {
     setIsLoading(true);
     try {
       const response = await usersApi.list();
-      setUsers(response.items);
+      // API returns { users: [], pagination: {} }
+      setUsers((response as any).users || response.items || []);
       setError(null);
     } catch (err) {
       setError('Failed to load users');
+      console.error('Error loading users:', err);
     } finally {
       setIsLoading(false);
     }

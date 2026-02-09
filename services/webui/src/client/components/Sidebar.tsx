@@ -20,6 +20,8 @@ const navigation: NavCategory[] = [
     label: 'Management',
     roles: ['admin', 'maintainer'],
     items: [
+      { label: 'Repositories', path: '/repositories', icon: '📦', roles: ['admin', 'maintainer'] },
+      { label: 'Teams', path: '/teams', icon: '👥', roles: ['admin', 'maintainer'] },
       { label: 'Settings', path: '/settings', icon: '⚙️', roles: ['admin', 'maintainer'] },
     ],
   },
@@ -28,6 +30,8 @@ const navigation: NavCategory[] = [
     roles: ['admin'],
     items: [
       { label: 'Users', path: '/users', icon: '👥', roles: ['admin'] },
+      { label: 'Tenants', path: '/tenants', icon: '🏢', roles: ['admin'] },
+      { label: 'Roles', path: '/roles', icon: '🔑', roles: ['admin'] },
     ],
   },
 ];
@@ -59,7 +63,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Header */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-dark-700">
         {!collapsed && (
-          <span className="text-xl font-bold text-gold-gradient">WebUI</span>
+          <Link to="/" className="flex items-center">
+            <img
+              src="/darwin-logo-transparent.png"
+              alt="Darwin"
+              className="h-10"
+            />
+          </Link>
         )}
         <button
           onClick={onToggle}

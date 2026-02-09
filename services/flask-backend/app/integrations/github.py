@@ -307,6 +307,29 @@ class GitHubClient:
             json=payload,
         )
 
+    async def create_issue_comment(
+        self, owner: str, repo: str, issue_number: int, body: str
+    ) -> dict:
+        """
+        Create a comment on a GitHub issue.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            issue_number: Issue number
+            body: Comment body (markdown)
+
+        Returns:
+            Comment data including comment ID
+        """
+        payload = {"body": body}
+
+        return await self._request(
+            "POST",
+            f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
+            json=payload,
+        )
+
     async def create_check_run(
         self,
         owner: str,

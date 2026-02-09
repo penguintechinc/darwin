@@ -218,6 +218,10 @@ _routes.json
 .cache/
 public
 
+# WebUI public assets (exception)
+!services/webui/public/
+!services/webui/public/**
+
 # Storybook build outputs
 .out
 .storybook-out
@@ -301,6 +305,7 @@ password.txt
 
 # Kubernetes
 *.kubeconfig
+k8s/manifests/secrets.yaml
 
 # Secrets and Keys
 secrets/
@@ -343,6 +348,8 @@ junit.xml
 
 # Version management
 .version.backup
+.buildtime
+*.buildtime
 
 # Development tools
 .air.toml

@@ -1,6 +1,19 @@
 import { useState, useCallback } from 'react';
 import api from '../lib/api';
-import type { User, CreateUserData, UpdateUserData, PaginatedResponse } from '../types';
+import type {
+  User,
+  CreateUserData,
+  UpdateUserData,
+  PaginatedResponse,
+  Repository,
+  CreateRepositoryData,
+  UpdateRepositoryData,
+  RepositoryListResponse,
+  OrganizationsResponse,
+  DashboardStats,
+  FindingsResponse,
+  DashboardFilters,
+} from '../types';
 
 // Generic API hook for loading states
 export function useApiCall<T>() {
@@ -81,6 +94,91 @@ export const goApi = {
 
   memoryStats: async (): Promise<Record<string, unknown>> => {
     const response = await api.get('/go/memory/stats');
+    return response.data;
+  },
+};
+
+// Repositories API
+export const repositoriesApi = {
+  list: async (
+    filters?: {
+      platform?: string;
+      organization?: string;
+      enabled?: boolean;
+      page?: number;
+      per_page?: number;
+    }
+  ): Promise<RepositoryListResponse> => {
+    const response = await api.get('/repositories', { params: filters });
+    return response.data;
+  },
+
+  get: async (id: number): Promise<Repository> => {
+    const response = await api.get(`/repositories/${id}`);
+    return response.data;
+  },
+
+  create: async (data: CreateRepositoryData): Promise<Repository> => {
+    const response = await api.post('/repositories', data);
+    return response.data;
+  },
+
+  update: async (id: number, data: UpdateRepositoryData): Promise<Repository> => {
+    const response = await api.put(`/repositories/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/repositories/${id}`);
+  },
+
+  listOrganizations: async (): Promise<OrganizationsResponse> => {
+    const response = await api.get('/repositories/organizations');
+    return response.data;
+  },
+};
+
+// Dashboard API
+export const dashboardApi = {
+  getStats: async (): Promise<DashboardStats> => {
+    const response = await api.get('/dashboard/stats');
+    return response.data;
+  },
+
+  getFindings: async (
+    filters?: DashboardFilters & { page?: number; per_page?: number }
+  ): Promise<FindingsResponse> => {
+    const response = await api.get('/dashboard/findings', { params: filters });
+    return response.data;
+  },
+};
+
+// Configuration API
+export const configApi = {
+  get: async (): Promise<any> => {
+    const response = await api.get('/config');
+    return response.data;
+  },
+
+  update: async (config: any): Promise<void> => {
+    await api.put('/config', config);
+  },
+};
+
+// Elder Integration API
+export const elderApi = {
+  push: async (filters?: { repository_filter?: string; severity_filter?: string; category_filter?: string }): Promise<any> => {
+    const response = await api.post('/integrations/elder', filters || {});
+    return response.data;
+  },
+
+  test: async (): Promise<any> => {
+    const response = await api.post('/integrations/elder/test');
+    return response.data;
+  },
+
+  getStats: async (): Promise<any> => {
+    const response = await api.get('/integrations/elder/stats');
     return response.data;
   },
 };

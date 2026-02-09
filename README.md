@@ -79,11 +79,35 @@ make dev                      # Start development environment
 - Automated security scanning and vulnerability management
 - Compliance audit logging (SOC2, ISO27001 ready)
 
+### AI-Powered Features
+- **AI-Powered Issue Plans**: Automatically generate implementation plans for new issues
+- Support for multiple AI providers (Claude, OpenAI, Ollama)
+- Configurable rate limits and cost controls
+
 ### Development Workflow
 - Comprehensive test coverage (unit, integration, e2e)
 - Automated code quality checks (linting, formatting, type checking)
 - Version management with semantic versioning
 - Feature branch workflow with required reviews
+
+## ☸️ Kubernetes Deployment
+
+### Quick Start
+```bash
+# Deploy to development (Kustomize)
+make k8s-deploy-dev
+
+# Or deploy using Helm
+make helm-install-dev
+
+# Check status
+make k8s-status-dev
+
+# Verify deployment
+./scripts/k8s-verify.sh
+```
+
+See [docs/KUBERNETES.md](docs/KUBERNETES.md) for comprehensive deployment guide.
 
 ## 📖 Documentation
 

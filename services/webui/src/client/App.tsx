@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import Layout from './components/Layout';
@@ -9,9 +10,18 @@ import Users from './pages/Users';
 import UserDetail from './pages/UserDetail';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import Repositories from './pages/Repositories';
+import Tenants from './pages/Tenants';
+import Teams from './pages/Teams';
+import Roles from './pages/Roles';
 
 function App() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, checkAuth } = useAuth();
+
+  // Check authentication status on mount
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   if (isLoading) {
     return (
@@ -44,6 +54,16 @@ function App() {
         {/* Profile - all authenticated users */}
         <Route path="/profile" element={<Profile />} />
 
+        {/* Repositories - Maintainer and Admin */}
+        <Route
+          path="/repositories"
+          element={
+            <RoleGuard allowedRoles={['admin', 'maintainer']}>
+              <Repositories />
+            </RoleGuard>
+          }
+        />
+
         {/* Settings - Maintainer and Admin */}
         <Route
           path="/settings"
@@ -68,6 +88,36 @@ function App() {
           element={
             <RoleGuard allowedRoles={['admin']}>
               <UserDetail />
+            </RoleGuard>
+          }
+        />
+
+        {/* Tenant management - Admin only */}
+        <Route
+          path="/tenants"
+          element={
+            <RoleGuard allowedRoles={['admin']}>
+              <Tenants />
+            </RoleGuard>
+          }
+        />
+
+        {/* Team management - Admin and Maintainer */}
+        <Route
+          path="/teams"
+          element={
+            <RoleGuard allowedRoles={['admin', 'maintainer']}>
+              <Teams />
+            </RoleGuard>
+          }
+        />
+
+        {/* Role management - Admin only */}
+        <Route
+          path="/roles"
+          element={
+            <RoleGuard allowedRoles={['admin']}>
+              <Roles />
             </RoleGuard>
           }
         />

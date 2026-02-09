@@ -1,6 +1,6 @@
 """Review API Endpoints - POST/GET/retry reviews."""
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from datetime import datetime
 
 from ...middleware import auth_required, role_required
@@ -52,6 +52,10 @@ def create_review_request():
     if not isinstance(categories, list):
         return jsonify({"error": "Categories must be a list"}), 400
 
+    # Extract user and tenant context from authenticated session
+    user = g.current_user
+    user_tenant_id = getattr(g, "user_tenant_id", None)
+
     review = create_review(
         external_id=data.get("external_id"),
         platform=data.get("platform"),
@@ -63,6 +67,8 @@ def create_review_request():
         pull_request_url=data.get("pull_request_url"),
         base_sha=data.get("base_sha"),
         head_sha=data.get("head_sha"),
+        triggered_by=user.get("id") if user else None,
+        tenant_id=user_tenant_id,
     )
 
     return jsonify(review), 201
@@ -106,10 +112,14 @@ def list_all_reviews():
     if per_page < 1 or per_page > 100:
         per_page = 20
 
+    # Scope to user's tenant when available
+    user_tenant_id = getattr(g, "user_tenant_id", None)
+
     reviews, total = list_reviews(
         platform=platform,
         repository=repository,
         status=status,
+        tenant_id=user_tenant_id,
         page=page,
         per_page=per_page,
     )

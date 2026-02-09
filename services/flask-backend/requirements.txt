@@ -4,10 +4,20 @@
 # Web Framework
 Flask==3.1.0
 flask-cors==5.0.0
+requests==2.32.3
+penguin-licensing @ git+https://github.com/penguintechinc/penguin-libs.git#subdirectory=packages/python-licensing
+
+# Background Tasks
+celery==5.4.0
+redis==5.2.1
 
 # Database
-pydal==20241031.1
+# SQLAlchemy for schema/migrations, PyDAL for runtime operations only
+SQLAlchemy==2.0.36
+alembic==1.14.0
+pydal==20260118.1
 psycopg2-binary==2.9.10
+psycopg==3.2.3
 
 # Authentication
 PyJWT==2.10.1

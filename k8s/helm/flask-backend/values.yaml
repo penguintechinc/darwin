@@ -50,7 +50,7 @@ resources:
     cpu: 500m
     memory: 512Mi
   requests:
-    cpu: 250m
+    cpu: 125m
     memory: 256Mi
 
 autoscaling:
@@ -162,6 +162,22 @@ configMapData:
   db-pool-size: "10"
   license-server-url: "https://license.penguintech.io"
   release-mode: "false"
+  ai-enabled: "true"
+  default-ai-provider: "ollama"
+  ollama-base-url: "http://localhost:11434"
+  ollama-security-llm: "granite-code:34b"
+  ollama-best-practices-llm: "llama3.3:70b"
+  ollama-framework-llm: "codestral:22b"
+  ollama-iac-llm: "granite-code:20b"
+  ollama-fallback-llm: "starcoder2:15b"
+  ollama-default-llm: "granite-code:20b"
+  review-security-enabled: "true"
+  review-best-practices-enabled: "true"
+  review-framework-enabled: "true"
+  review-iac-enabled: "true"
+  max-files-per-review: "50"
+  max-lines-per-file: "1000"
+  review-timeout-seconds: "300"
 
 secretData:
   secret-key: "changeme-in-production"
@@ -169,3 +185,9 @@ secretData:
   db-user: "app_user"
   db-pass: "changeme-in-production"
   license-key: "PENG-XXXX-XXXX-XXXX-XXXX-ABCD"
+  anthropic-api-key: ""
+  openai-api-key: ""
+  github-webhook-secret: ""
+  gitlab-webhook-secret: ""
+  gitlab-token: ""
+  credential-encryption-key: ""

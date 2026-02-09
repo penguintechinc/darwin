@@ -238,6 +238,25 @@ class GitLabClient:
             json=payload
         )
 
+    async def create_issue_note(self, project_id: str, issue_iid: int, body: str) -> dict:
+        """
+        Create a note (comment) on a GitLab issue.
+
+        Args:
+            project_id: Project ID or URL-encoded path
+            issue_iid: Issue IID (internal ID)
+            body: Note body (markdown)
+
+        Returns:
+            Note data including note ID
+        """
+        payload = {"body": body}
+
+        return await self._request(
+            "POST", f"/projects/{project_id}/issues/{issue_iid}/notes",
+            json=payload
+        )
+
     async def create_mr_discussion(
         self, project_id: str, mr_iid: int, body: str, position: dict
     ) -> dict:

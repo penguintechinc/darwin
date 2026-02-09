@@ -5,11 +5,12 @@ from datetime import datetime, timedelta
 
 import bcrypt
 import jwt
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
 from .middleware import auth_required, get_current_user
 from .models import (
     create_user,
+    get_db,
     get_user_by_email,
     is_refresh_token_valid,
     revoke_all_user_tokens,
@@ -30,12 +31,62 @@ def verify_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
+def get_user_tenant_and_team_context(user_id: int) -> tuple:
+    """
+    Get tenant and team membership context for a user.
+
+    Returns:
+        Tuple of (default_tenant_id, tenant_memberships, team_memberships, global_role)
+    """
+    from .models import get_db
+    db = get_db()
+
+    # Get user's default tenant and global role
+    user = db(db.users.id == user_id).select().first()
+    if not user:
+        return None, [], [], "viewer"
+
+    default_tenant_id = user.default_tenant_id
+    global_role = user.global_role or user.role
+
+    # Get tenant memberships
+    tenant_members = db(db.tenant_members.user_id == user_id).select()
+    tenant_memberships = []
+    for tm in tenant_members:
+        if tm.is_active:
+            tenant_memberships.append({
+                "tenant_id": tm.tenant_id,
+                "role": tm.role,
+            })
+
+    # Get team memberships
+    team_members = db(db.team_members.user_id == user_id).select()
+    team_memberships = []
+    for tm in team_members:
+        if tm.is_active:
+            team_memberships.append({
+                "team_id": tm.team_id,
+                "role": tm.role,
+            })
+
+    return default_tenant_id, tenant_memberships, team_memberships, global_role
+
+
 def create_access_token(user_id: int, role: str) -> str:
-    """Create JWT access token."""
+    """Create JWT access token with tenant/team context."""
     expires = datetime.utcnow() + current_app.config["JWT_ACCESS_TOKEN_EXPIRES"]
+
+    # Get tenant and team context
+    default_tenant_id, tenant_memberships, team_memberships, global_role = \
+        get_user_tenant_and_team_context(user_id)
+
     payload = {
         "sub": str(user_id),
         "role": role,
+        "global_role": global_role,
+        "default_tenant_id": default_tenant_id,
+        "tenant_memberships": tenant_memberships,
+        "team_memberships": team_memberships,
         "type": "access",
         "exp": expires,
         "iat": datetime.utcnow(),
@@ -63,7 +114,10 @@ def create_refresh_token(user_id: int) -> tuple[str, datetime]:
 
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    """Login endpoint - returns access and refresh tokens."""
+    """Login endpoint - validates tenant membership and returns access tokens.
+
+    Tenant Isolation: Users must belong to the tenant they're logging into.
+    """
     data = request.get_json()
 
     if not data:
@@ -71,6 +125,7 @@ def login():
 
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
+    tenant_slug = data.get("tenant", "default").strip().lower()  # Default to "default" tenant
 
     if not email or not password:
         return jsonify({"error": "Email and password required"}), 400
@@ -88,6 +143,26 @@ def login():
     if not user.get("is_active"):
         return jsonify({"error": "Account is deactivated"}), 401
 
+    # Get tenant and team context
+    default_tenant_id, tenant_memberships, team_memberships, global_role = \
+        get_user_tenant_and_team_context(user["id"])
+
+    # Validate tenant membership (CRITICAL for tenant isolation)
+    db = get_db()
+
+    # Find the requested tenant
+    tenant = db((db.tenants.slug == tenant_slug) & (db.tenants.is_active == True)).select().first()
+    if not tenant:
+        return jsonify({"error": f"Tenant '{tenant_slug}' not found or inactive"}), 401
+
+    # Check if user has access to this tenant
+    # Global admins can access any tenant
+    if global_role not in ("admin", "maintainer"):
+        # Non-global users must be a member of the tenant
+        has_access = any(tm["tenant_id"] == tenant.id for tm in tenant_memberships)
+        if not has_access:
+            return jsonify({"error": f"Access denied to tenant '{tenant_slug}'"}), 403
+
     # Generate tokens
     access_token = create_access_token(user["id"], user["role"])
     refresh_token, refresh_expires = create_refresh_token(user["id"])
@@ -102,6 +177,15 @@ def login():
             "email": user["email"],
             "full_name": user.get("full_name", ""),
             "role": user["role"],
+            "global_role": global_role,
+            "default_tenant_id": default_tenant_id,
+            "tenant_memberships": tenant_memberships,
+            "team_memberships": team_memberships,
+            "current_tenant": {
+                "id": tenant.id,
+                "name": tenant.name,
+                "slug": tenant.slug
+            }
         },
     }), 200
 
@@ -153,11 +237,25 @@ def refresh():
     access_token = create_access_token(user["id"], user["role"])
     new_refresh_token, refresh_expires = create_refresh_token(user["id"])
 
+    # Get tenant and team context
+    default_tenant_id, tenant_memberships, team_memberships, global_role = \
+        get_user_tenant_and_team_context(user["id"])
+
     return jsonify({
         "access_token": access_token,
         "refresh_token": new_refresh_token,
         "token_type": "Bearer",
         "expires_in": int(current_app.config["JWT_ACCESS_TOKEN_EXPIRES"].total_seconds()),
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "full_name": user.get("full_name", ""),
+            "role": user["role"],
+            "global_role": global_role,
+            "default_tenant_id": default_tenant_id,
+            "tenant_memberships": tenant_memberships,
+            "team_memberships": team_memberships,
+        },
     }), 200
 
 
@@ -186,14 +284,24 @@ def logout():
 @auth_bp.route("/me", methods=["GET"])
 @auth_required
 def get_me():
-    """Get current user profile."""
+    """Get current user profile with tenant/team context."""
     user = get_current_user()
+
+    # Get tenant and team context from g object (populated by auth_required decorator)
+    default_tenant_id = getattr(g, "user_tenant_id", None)
+    global_role = getattr(g, "user_global_role", "viewer")
+    tenant_memberships = getattr(g, "user_tenant_memberships", [])
+    team_memberships = getattr(g, "user_team_memberships", [])
 
     return jsonify({
         "id": user["id"],
         "email": user["email"],
         "full_name": user.get("full_name", ""),
         "role": user["role"],
+        "global_role": global_role,
+        "default_tenant_id": default_tenant_id,
+        "tenant_memberships": tenant_memberships,
+        "team_memberships": team_memberships,
         "is_active": user["is_active"],
         "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
     }), 200

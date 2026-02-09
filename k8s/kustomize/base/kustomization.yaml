@@ -16,6 +16,13 @@ resources:
 - ../../manifests/rbac.yaml
 - ../../manifests/configmap.yaml
 - ../../manifests/secrets.yaml
+- ../../manifests/postgresql/configmap.yaml
+- ../../manifests/postgresql/service.yaml
+- ../../manifests/postgresql/statefulset.yaml
+- ../../manifests/redis/deployment.yaml
+- ../../manifests/redis/pvc.yaml
+- ../../manifests/redis/secret.yaml
+- ../../manifests/redis/service.yaml
 - ../../manifests/flask-backend/deployment.yaml
 - ../../manifests/flask-backend/service.yaml
 - ../../manifests/webui/deployment.yaml
