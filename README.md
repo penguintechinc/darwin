@@ -5,6 +5,10 @@
 [![Docker](https://img.shields.io/badge/Docker-Multi--arch-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-Limited%20AGPL3-blue.svg)](LICENSE.md)
 
+<div align="center">
+  <img src="./darwin-logo.png" alt="Darwin Logo" width="200" height="200">
+</div>
+
 # 🧬 Darwin - Intelligent Code Review & Issue Planning
 
 **Enterprise-Grade AI Code Review with GitHub/GitLab Integration**
