@@ -1,94 +1,130 @@
-[![CI](https://github.com/PenguinCloud/project-template/actions/workflows/ci.yml/badge.svg)](https://github.com/PenguinCloud/project-template/actions/workflows/ci.yml)
-[![Docker Build](https://github.com/PenguinCloud/project-template/actions/workflows/docker-build.yml/badge.svg)](https://github.com/PenguinCloud/project-template/actions/workflows/docker-build.yml)
-[![codecov](https://codecov.io/gh/PenguinCloud/project-template/branch/main/graph/badge.svg)](https://codecov.io/gh/PenguinCloud/project-template)
-[![Go Report Card](https://goreportcard.com/badge/github.com/PenguinCloud/project-template)](https://goreportcard.com/report/github.com/PenguinCloud/project-template)
-[![version](https://img.shields.io/badge/version-5.1.1-blue.svg)](https://semver.org)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/penguintechinc/darwin)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.0+-blue.svg)](https://flask.palletsprojects.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-blue.svg)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Multi--arch-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-Limited%20AGPL3-blue.svg)](LICENSE.md)
 
 ```
- ____            _           _     _____                    _       _
-|  _ \ _ __ ___ (_) ___  ___| |_  |_   _|__ _ __ ___  _ __ | | __ _| |_ ___
-| |_) | '__/ _ \| |/ _ \/ __| __|   | |/ _ \ '_ ` _ \| '_ \| |/ _` | __/ _ \
-|  __/| | | (_) | |  __/ (__| |_    | |  __/ | | | | | |_) | | (_| | ||  __/
-|_|   |_|  \___/| |\___|\___|\__|   |_|\___|_| |_| |_| .__/|_|\__,_|\__\___|
-               _/ |                                  |_|
-              |__/
+ _____             _   _
+|  __ \           | | (_)
+| |  | | __ _ _ __| |_ _ _ __
+| |  | |/ _` | '__| __| | '_ \
+| |__| | (_| | |  | |_| | | | |
+|_____/ \__,_|_|   \__|_|_| |_|
+
+AI-Powered Code Review & Issue Planning for GitHub & GitLab
 ```
 
-# 🏗️ Enterprise Project Template
+# Darwin - Intelligent Code Review & Issue Planning
 
-**The Ultimate Multi-Language Development Foundation**
+**Enterprise-Grade AI Code Review with GitHub/GitLab Integration**
 
-This comprehensive project template provides a production-ready foundation for enterprise software development, incorporating best practices from Penguin Tech Inc projects. Built with security, scalability, and developer experience at its core, it offers standardized tooling for Go, Python, and Node.js applications with integrated licensing, monitoring, and enterprise-grade infrastructure.
-## ✨ Why Choose This Template?
+Darwin is an intelligent code review and issue planning system that leverages Claude AI to automatically analyze pull requests, generate comprehensive implementation plans, and maintain code quality. Built with enterprise multi-tenancy, role-based access control, and seamless platform integration for GitHub and GitLab.
+## ✨ Core Features
 
-### 🏭 Enterprise-Ready Architecture
-Built for production from day one with multi-language support (Go 1.24+, Python 3.12/3.13, Node.js 18+), comprehensive CI/CD pipelines, and enterprise-grade security scanning.
+### 🤖 AI-Powered Code Review
+- **Automated PR Analysis**: Claude AI analyzes pull requests across multiple categories (security, best practices, framework patterns, infrastructure)
+- **Intelligent Feedback**: Context-aware suggestions with severity levels (critical, major, minor, suggestion)
+- **Multi-Platform Support**: Native GitHub and GitLab webhook integration with platform identity mapping
+- **Configurable Reviews**: Per-repository settings for review triggers, AI models, and analysis categories
 
-### 🔒 Security First
-- **8-stage security validation** including Trivy, CodeQL, and Semgrep scanning
-- **TLS 1.2 minimum enforcement**, preferring TLS 1.3
-- **Automated vulnerability detection** with Dependabot and Socket.dev integration
-- **Secrets management** with environment-based configuration
+### 📋 Issue Planning Automation
+- **Auto-Generated Plans**: Claude automatically generates implementation plans for new GitHub/GitLab issues
+- **Step-by-Step Guidance**: Detailed breakdowns with task dependencies and effort estimates
+- **Cost & Rate Controls**: Configurable daily limits and monthly cost caps to manage AI spending
+- **Platform Comments**: Automatically posts plans back to issues with status updates
 
-### 🚀 Performance Optimized
-- **Multi-architecture Docker builds** (amd64/arm64) with Debian-slim base images
-- **Parallel CI/CD workflows** for optimized build times
-- **eBPF/XDP networking** support for high-performance applications
-- **Connection pooling** and caching strategies built-in
+### 👥 Enterprise Multi-Tenancy
+- **Tenant Isolation**: Complete data isolation across organizations
+- **Team Management**: Flexible team structures with repository-level memberships
+- **RBAC System**: Admin, Maintainer, and Viewer roles with custom role support
+- **Audit Logging**: Comprehensive activity tracking for compliance
 
-### 🏢 PenguinTech License Server Integration
-- **Centralized feature gating** with `https://license.penguintech.io`
-- **Universal JSON response format** across all products
-- **Multi-tier licensing** (community/professional/enterprise)
-- **Usage tracking and compliance** reporting
+### 🔗 External Account Mapping
+- **Platform Identities**: Link GitHub/GitLab users to Darwin accounts for accurate attribution
+- **User Resolution**: Webhooks automatically resolve code reviewers to Darwin users
+- **Review Attribution**: Track who triggered reviews across platforms
 
-### 🔄 Self-Healing & Monitoring
-- **Built-in health checks** and self-healing capabilities
-- **Prometheus metrics** and Grafana dashboard integration
-- **Structured logging** with configurable verbosity levels
-- **Real-time monitoring** and alerting
+### 🏢 Enterprise Features
+- **License Integration**: PenguinTech License Server with feature gating
+- **Multi-AI Support**: Claude, OpenAI, and Ollama provider support
+- **Scalable Architecture**: Flask backend + React WebUI + PostgreSQL
+- **Production Ready**: Kubernetes deployment with Helm charts included
 
-### 🌐 Multi-Environment Support
-- **Air-gapped deployment** ready with local caching
-- **Container orchestration** with Kubernetes and Helm
-- **Environment-specific configurations** for dev/staging/production
-- **Blue-green deployment** support with automated rollbacks
+## 🚀 Quick Start
 
-## 🛠️ Quick Start
-
+### Local Development
 ```bash
-# Clone and setup
-git clone <your-repository-url>
-cd your-project
-make setup                    # Install dependencies and setup environment
-make dev                      # Start development environment
+# Clone repository
+git clone https://github.com/penguintechinc/darwin.git
+cd darwin
+
+# Setup and run
+make setup                    # Install dependencies
+make dev                      # Start Docker Compose stack
 ```
 
-## 📚 Key Components
+Services available after startup:
+- **API**: http://localhost:5000
+- **WebUI**: http://localhost:3000
+- **Database**: PostgreSQL on localhost:5432
+- **Adminer**: http://localhost:8080 (DB management)
 
-### Core Technologies
-- **Languages**: Go 1.24+, Python 3.12/3.13, Node.js 18+
-- **Databases**: PostgreSQL with PyDAL/GORM, Redis/Valkey caching
-- **Containers**: Docker with multi-stage builds, Kubernetes deployment
-- **Monitoring**: Prometheus, Grafana, structured logging
+### Default Credentials
+- **Email**: admin@localhost.local
+- **Password**: admin123
 
-### Security Features
-- Multi-factor authentication (MFA) and JWT tokens
-- Role-based access control (RBAC)
-- Automated security scanning and vulnerability management
-- Compliance audit logging (SOC2, ISO27001 ready)
+### Test the System
+```bash
+make test-alpha              # Run smoke tests (build, runtime, mock data, API, page load)
+```
 
-### AI-Powered Features
-- **AI-Powered Issue Plans**: Automatically generate implementation plans for new issues
-- Support for multiple AI providers (Claude, OpenAI, Ollama)
-- Configurable rate limits and cost controls
+## 🏗️ Architecture
 
-### Development Workflow
-- Comprehensive test coverage (unit, integration, e2e)
-- Automated code quality checks (linting, formatting, type checking)
-- Version management with semantic versioning
-- Feature branch workflow with required reviews
+### Three-Container Design
+- **Flask Backend** (`services/flask-backend`): Python 3.13, PyDAL ORM, SQLAlchemy migrations
+- **WebUI** (`services/webui`): React + TypeScript, role-based UI
+- **Database**: PostgreSQL 15+ with Alembic version control
+
+### API Design
+- RESTful endpoints at `/api/v1/*`
+- JWT authentication with role-based access control
+- Multi-tenancy support via `tenant_id` in requests
+- Comprehensive error handling with structured responses
+
+### Key Files
+- `services/flask-backend/app/db_schema.py` - SQLAlchemy schema definitions
+- `services/flask-backend/app/models.py` - PyDAL runtime models + helpers
+- `services/flask-backend/app/api/v1/` - API endpoints (reviews, webhooks, identities, etc.)
+- `services/webui/src/client/` - React components and API client
+
+## 🔌 Webhook Integration
+
+### GitHub Integration
+1. Create webhook at `https://github.com/{owner}/{repo}/settings/hooks`
+2. Payload URL: `https://your-darwin-instance/api/v1/webhooks/github`
+3. Content type: `application/json`
+4. Events: Pull requests, Issues
+5. Set webhook secret in repository config
+
+### GitLab Integration
+1. Create webhook at `https://gitlab.com/{group}/{project}/-/hooks`
+2. Payload URL: `https://your-darwin-instance/api/v1/webhooks/gitlab`
+3. Events: Push, Issues, Merge requests
+4. Secret token: Set in repository config
+
+### Platform Identity Mapping
+Link external users to Darwin accounts:
+```bash
+POST /api/v1/platform-identities
+{
+  "platform": "github",
+  "platform_username": "octocat",
+  "platform_user_id": "1",
+  "platform_avatar_url": "https://..."
+}
+```
 
 ## ☸️ Kubernetes Deployment
 
@@ -111,47 +147,72 @@ See [docs/KUBERNETES.md](docs/KUBERNETES.md) for comprehensive deployment guide.
 
 ## 📖 Documentation
 
-- **Getting Started**: [docs/development/](docs/development/)
-- **API Reference**: [docs/api/](docs/api/)
-- **Deployment Guide**: [docs/deployment/](docs/deployment/)
-- **Architecture Overview**: [docs/architecture/](docs/architecture/)
-- **License Integration**: [docs/licensing/](docs/licensing/)
+- **Development Setup**: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- **Testing Guide**: [docs/TESTING.md](docs/TESTING.md)
+- **Pre-Commit Checklist**: [docs/PRE_COMMIT.md](docs/PRE_COMMIT.md)
+- **Kubernetes Deployment**: [docs/KUBERNETES.md](docs/KUBERNETES.md)
+- **Architecture & Standards**: [docs/STANDARDS.md](docs/STANDARDS.md)
+- **API Tests**: [tests/alpha/05-api-test.sh](tests/alpha/05-api-test.sh)
 
 ## 🤝 Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Maintainers
-- **Primary**: creatorsemailhere@penguintech.group
-- **General**: info@penguintech.group
 - **Company**: [www.penguintech.io](https://www.penguintech.io)
+- **Support Email**: support@penguintech.io
+- **Sales Email**: sales@penguintech.io
 
-### Community Contributors
-- *Your name could be here! Submit a PR to get started.*
+## 🧪 Testing
 
-## 📞 Support & Resources
+Darwin includes comprehensive test suites:
 
-- **Documentation**: [./docs/](docs/)
-- **Premium Support**: https://support.penguintech.group
-- **Community Issues**: [GitHub Issues](../../issues)
-- **License Server Status**: https://status.penguintech.io
+### Alpha Tests (Build & Runtime)
+```bash
+make test-alpha              # All 5 tests (01-05)
+make test-alpha-01          # Build test only
+make test-alpha-03          # Mock data integrity
+make test-alpha-05          # API endpoint verification
+```
+
+### Test Coverage
+- **Smoke Tests**: Docker build, service startup, page load
+- **API Tests**: Review creation, webhook simulation, identity management
+- **Mock Data**: 3 users × 3 reviews each with proper schema compliance
+- **Integration Tests**: Webhook→review flow with user resolution
+
+## 📊 Monitoring & Observability
+
+- **Health Checks**: `/healthz` and `/readyz` endpoints
+- **Prometheus Metrics**: `/metrics` endpoint for Grafana integration
+- **Structured Logging**: Timestamped debug and error logs
+- **Database Migrations**: Alembic version control with automatic upgrades
+
+## 💡 Key Implementation Details
+
+### Review-User Association
+Reviews now track who triggered them via the `triggered_by` foreign key. Webhook handlers resolve external platform users (GitHub/GitLab) to Darwin users using the `platform_identities` table.
+
+### Multi-Tenancy
+- Reviews inherit `tenant_id` and `team_id` from repository configuration
+- List operations scope results to authenticated user's tenant
+- Repository-level access control via `repository_members` table
+
+### Schema Synchronization
+Darwin uses a dual-ORM pattern:
+- **SQLAlchemy** (`db_schema.py`): Schema creation and Alembic migrations
+- **PyDAL** (`models.py`): Runtime queries and business logic
+Both must stay synchronized or columns become invisible to application code.
 
 ## 📄 License
 
-This project is licensed under the Limited AGPL3 with preamble for fair use - see [LICENSE.md](docs/LICENSE.md) for details.
+This project is licensed under the Limited AGPL3 with preamble for fair use - see [LICENSE.md](LICENSE.md) for details.
 
 **License Highlights:**
 - **Personal & Internal Use**: Free under AGPL-3.0
 - **Commercial Use**: Requires commercial license
 - **SaaS Deployment**: Requires commercial license if providing as a service
 
-### Contributor Employer Exception (GPL-2.0 Grant)
+### Contributor Employer Exception
 
-Companies employing official contributors receive GPL-2.0 access to community features:
-
-- **Perpetual for Contributed Versions**: GPL-2.0 rights to versions where the employee contributed remain valid permanently, even after the employee leaves the company
-- **Attribution Required**: Employee must be credited in CONTRIBUTORS, AUTHORS, commit history, or release notes
-- **Future Versions**: New versions released after employment ends require standard licensing
-- **Community Only**: Enterprise features still require a commercial license
-
-This exception rewards contributors by providing lasting fair use rights to their employers. See [LICENSE.md](docs/LICENSE.md) for full terms.
+Companies employing official contributors receive GPL-2.0 access to community features with perpetual rights to contributed versions. See [LICENSE.md](LICENSE.md) for full terms.
