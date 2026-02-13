@@ -29,14 +29,14 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   hosts:
-    - host: darwin.penguintech.io
+    - host: darwin.penguintech.cloud
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: darwin-tls
       hosts:
-        - darwin.penguintech.io
+        - darwin.penguintech.cloud
 
 configMapData:
   api-url: "http://flask-backend"

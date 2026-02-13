@@ -14,7 +14,7 @@ RELEASE_NAME="darwin"
 CHART_PATH="$PROJECT_ROOT/k8s/helm/flask-backend"
 VALUES_FILE="$CHART_PATH/values-beta.yaml"
 IMAGE_REGISTRY="registry-dal2.penguintech.io"
-APP_HOST="darwin.penguintech.io"
+APP_HOST="darwin.penguintech.cloud"
 VERSION=$(cat "$PROJECT_ROOT/.version" 2>/dev/null || echo "v1.0.0")
 
 # Flags
